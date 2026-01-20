@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locations | Parking Management</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-brand">
+                <h1>Parking Management</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="index.html" class="nav-tab">Live Monitor</a>
+                <a href="locations.html" class="nav-tab">Locations</a>
+                <a href="inspector.html" class="nav-tab">Data Inspector</a>
+                <a href="add-camera.html" class="nav-tab">Add Camera</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <h2 class="page-title">Parking Locations</h2>
+        <p class="page-subtitle">Manage parking lots and view spot-level availability</p>
+
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="card-header">
+                <span class="card-title">Add New Location</span>
+            </div>
+            <div class="card-body">
+                <form id="add-location-form" class="horizontal-form" onsubmit="handleAddLocation(event)">
+                    <div class="form-group">
+                        <label for="location-name">Location Name</label>
+                        <input type="text" id="location-name" placeholder="e.g., North Lot" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Location</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="grid-2col">
+            <!-- Locations List -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">All Locations</span>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th width="100">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locations-tbody">
+                            <tr>
+                                <td colspan="2" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Location Details -->
+            <div id="location-details" class="card" style="display: none;">
+                <div class="card-header">
+                    <span class="card-title" id="details-title">Location Details</span>
+                </div>
+                <div class="card-body">
+                    <div class="metrics-row" style="margin-bottom: 2rem;">
+                        <div class="metric-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                            <div class="metric-value" id="loc-total-spots">-</div>
+                            <div class="metric-label">Total Spots</div>
+                        </div>
+                        <div class="metric-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                            <div class="metric-value" id="loc-occupied-spots">-</div>
+                            <div class="metric-label">Occupied</div>
+                        </div>
+                        <div class="metric-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                            <div class="metric-value" id="loc-free-spots">-</div>
+                            <div class="metric-label">Available</div>
+                        </div>
+                    </div>
+
+                    <h4>Spot-Level Status</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Spot ID</th>
+                                <th>Status</th>
+                                <th>Last Check</th>
+                            </tr>
+                        </thead>
+                        <tbody id="spots-tbody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                Managed by the <strong>Town of Apex's IT Innovations</strong> division
+            </div>
+            <div class="footer-actions">
+                <span class="footer-version" id="app-version">v0.0.0</span>
+                <button class="btn-bug-report"
+                    onclick="window.location.href='mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard'">Report
+                    Bug</button>
+            </div>
+        </div>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/shared.js"></script>
+    <script>
+        let selectedLocationId = null;
+
+        async function loadLocations() {
+            try {
+                const locations = await getLocations();
+                renderLocations(locations);
+            } catch (error) {
+                showToast('Failed to load locations', 'error');
+            }
+        }
+
+        function renderLocations(locations) {
+            const tbody = document.getElementById('locations-tbody');
+            if (locations.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">No locations created yet</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = locations.map(loc => `
+                <tr class="${selectedLocationId === loc.id ? 'active-row' : ''}" style="cursor: pointer" onclick="viewLocation('${loc.id}', '${loc.name}')">
+                    <td>${escapeHtml(loc.name)}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); viewLocation('${loc.id}', '${loc.name}')">View</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function handleAddLocation(event) {
+            event.preventDefault();
+            const input = document.getElementById('location-name');
+            const name = input.value.trim();
+
+            if (!name) return;
+
+            try {
+                await createLocation(name);
+                input.value = '';
+                showToast(`Location "${name}" created`, 'success');
+                loadLocations();
+            } catch (error) {
+                showToast(`Failed to create location: ${error.message}`, 'error');
+            }
+        }
+
+        async function viewLocation(id, name) {
+            selectedLocationId = id;
+            document.getElementById('location-details').style.display = 'block';
+            document.getElementById('details-title').textContent = `Status: ${name}`;
+
+            // Refresh table selection
+            document.querySelectorAll('#locations-tbody tr').forEach(row => {
+                row.classList.remove('active-row');
+            });
+
+            refreshLocationStatus();
+        }
+
+        async function refreshLocationStatus() {
+            if (!selectedLocationId) return;
+
+            try {
+                const status = await getLocationStatus(selectedLocationId);
+                renderSpotStatus(status);
+            } catch (error) {
+                console.error('Failed to load spot status', error);
+            }
+        }
+
+        function renderSpotStatus(spots) {
+            const tbody = document.getElementById('spots-tbody');
+            const totalEl = document.getElementById('loc-total-spots');
+            const occupiedEl = document.getElementById('loc-occupied-spots');
+            const freeEl = document.getElementById('loc-free-spots');
+
+            const total = spots.length;
+            const occupied = spots.filter(s => s.occupied).length;
+            const free = total - occupied;
+
+            totalEl.textContent = total;
+            occupiedEl.textContent = occupied;
+            freeEl.textContent = free;
+
+            if (spots.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">No spots linked to this location yet. Register a camera to this location to see spots.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = spots.map(s => `
+                <tr>
+                    <td><code>${escapeHtml(s.spot_id)}</code></td>
+                    <td>
+                        <span class="badge ${s.occupied ? 'badge-danger' : 'badge-success'}">
+                            ${s.occupied ? 'Occupied' : 'Available'}
+                        </span>
+                    </td>
+                    <td class="text-muted">${formatTimestamp(s.last_update)}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Auto-refresh logic for location status
+        setInterval(() => {
+            if (selectedLocationId) refreshLocationStatus();
+        }, 5000);
+
+        // Initial load
+        loadLocations();
+    </script>
+
+    <style>
+        .active-row {
+            background-color: var(--color-background-alt);
+            font-weight: 600;
+        }
+
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 2rem;
+        }
+
+        .metric-card {
+            text-align: center;
+        }
+
+        .horizontal-form {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+
+        .horizontal-form .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+    </style>
+</body>
+
+</html>

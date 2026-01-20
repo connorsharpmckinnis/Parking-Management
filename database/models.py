@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Enum, BigInteger, UUID
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Enum, BigInteger, UUID, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 import uuid
@@ -21,12 +21,23 @@ class DesiredState(enum.Enum):
     STOPPED = "stopped"
     MAINTENANCE = "maintenance"
 
+class Location(Base):
+    __tablename__ = "locations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    cameras = relationship("Camera", back_populates="location_ref")
+    spots = relationship("Spot", back_populates="location")
+
 class Camera(Base):
     __tablename__ = "cameras"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
-    location = Column(String, nullable=True)
+    location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=True)
     
     # Connection details
     connection_type = Column(Enum(ConnectionType), default=ConnectionType.FIBER)
@@ -44,10 +55,23 @@ class Camera(Base):
     status = Column(Enum(DeviceStatus), default=DeviceStatus.DISCONNECTED)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    location_ref = relationship("Location", back_populates="cameras")
     events = relationship("OccupancyEvent", back_populates="camera")
     health_logs = relationship("HealthLog", back_populates="camera")
+    observations = relationship("SpotObservation", back_populates="camera")
+
+class Spot(Base):
+    __tablename__ = "spots"
+
+    id = Column(String, primary_key=True) # e.g. "North-001"
+    location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False)
+    name = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    location = relationship("Location", back_populates="spots")
+    observations = relationship("SpotObservation", back_populates="spot")
 
 class OccupancyEvent(Base):
     __tablename__ = "occupancy_events"
@@ -64,6 +88,18 @@ class OccupancyEvent(Base):
     metadata_json = Column(JSON, nullable=True)
 
     camera = relationship("Camera", back_populates="events")
+
+class SpotObservation(Base):
+    __tablename__ = "spot_observations"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    spot_id = Column(String, ForeignKey("spots.id"), nullable=False)
+    camera_id = Column(UUID(as_uuid=True), ForeignKey("cameras.id"), nullable=False)
+    occupied = Column(Boolean, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    spot = relationship("Spot", back_populates="observations")
+    camera = relationship("Camera", back_populates="observations")
 
 class HealthLog(Base):
     __tablename__ = "health_logs"

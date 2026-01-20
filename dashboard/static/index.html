@@ -21,6 +21,7 @@
             </div>
             <nav class="header-nav">
                 <a href="index.html" class="nav-tab">Live Monitor</a>
+                <a href="locations.html" class="nav-tab">Locations</a>
                 <a href="inspector.html" class="nav-tab">Data Inspector</a>
                 <a href="add-camera.html" class="nav-tab">Add Camera</a>
             </nav>
@@ -81,9 +82,21 @@
         // Live Monitor Page Logic
         // ============================================
 
+        let locationsMap = {};
+
         async function loadCameras() {
             try {
-                const cameras = await getCameras();
+                const [cameras, locations] = await Promise.all([
+                    getCameras(),
+                    getLocations()
+                ]);
+
+                // Build locations map
+                locationsMap = {};
+                locations.forEach(loc => {
+                    locationsMap[loc.id] = loc.name;
+                });
+
                 renderMetrics(cameras);
                 renderCameraGrid(cameras);
             } catch (error) {
@@ -137,7 +150,7 @@
                             </div>
                             <div class="camera-info-row">
                                 <span class="camera-info-label">Location</span>
-                                <span class="camera-info-value">${escapeHtml(cam.location || 'N/A')}</span>
+                                <span class="camera-info-value">${escapeHtml(locationsMap[cam.location_id] || 'N/A')}</span>
                             </div>
                             <div class="camera-info-row">
                                 <span class="camera-info-label">State</span>

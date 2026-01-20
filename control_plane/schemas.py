@@ -4,9 +4,30 @@ from uuid import UUID
 from typing import Optional, Dict, Any, List, Union
 from database.models import ConnectionType, DesiredState, DeviceStatus
 
+class LocationBase(BaseModel):
+    name: str
+
+class LocationCreate(LocationBase):
+    pass
+
+class LocationResponse(LocationBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+class SpotBase(BaseModel):
+    id: str
+    location_id: UUID
+    name: Optional[str] = None
+
+class SpotResponse(SpotBase):
+    model_config = ConfigDict(from_attributes=True)
+    created_at: datetime
+
 class CameraBase(BaseModel):
     name: str
-    location: Optional[str] = None
+    location_id: Optional[UUID] = None
     connection_type: ConnectionType = ConnectionType.FIBER
     stream_url: str
     model_version: str = "yolo11n"
@@ -20,7 +41,7 @@ class CameraCreate(CameraBase):
 class CameraUpdate(BaseModel):
     """Schema for partial camera updates (PATCH)."""
     name: Optional[str] = None
-    location: Optional[str] = None
+    location_id: Optional[UUID] = None
     desired_state: Optional[DesiredState] = None
     geometry: Optional[Any] = None
     processing_interval_sec: Optional[int] = None

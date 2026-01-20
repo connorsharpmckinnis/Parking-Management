@@ -43,12 +43,12 @@ async function apiRequest(endpoint, options = {}) {
                 ...options.headers
             }
         });
-        
+
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(errorText || `HTTP ${response.status}`);
         }
-        
+
         if (response.status === 204) return null;
         return await response.json();
     } catch (error) {
@@ -62,12 +62,12 @@ async function apiRequest(endpoint, options = {}) {
  */
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container') || createToastContainer();
-    
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
-    
+
     setTimeout(() => {
         toast.style.animation = 'slideIn 0.3s ease reverse';
         setTimeout(() => toast.remove(), 300);
@@ -97,6 +97,21 @@ function escapeHtml(text) {
 
 async function getCameras() {
     return await apiRequest('/cameras');
+}
+
+async function getLocations() {
+    return await apiRequest('/locations');
+}
+
+async function createLocation(name) {
+    return await apiRequest('/locations', {
+        method: 'POST',
+        body: JSON.stringify({ name })
+    });
+}
+
+async function getLocationStatus(locationId) {
+    return await apiRequest(`/locations/${locationId}/status`);
 }
 
 async function getEvents(limit = 100) {
@@ -140,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (versionEl) {
         versionEl.textContent = `v${APP_VERSION}`;
     }
-    
+
     // Set active nav tab based on current page
     const currentPage = window.location.pathname.split('/').pop() || 'index.html';
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -158,14 +173,14 @@ document.addEventListener('DOMContentLoaded', () => {
 function initTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
-    
+
     tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const targetId = btn.dataset.tab;
-            
+
             tabBtns.forEach(b => b.classList.remove('active'));
             tabContents.forEach(c => c.classList.remove('active'));
-            
+
             btn.classList.add('active');
             document.getElementById(targetId).classList.add('active');
         });
@@ -182,12 +197,12 @@ class AutoRefresh {
         this.intervalMs = intervalMs;
         this.intervalId = null;
     }
-    
+
     start() {
         this.callback(); // Initial load
         this.intervalId = setInterval(() => this.callback(), this.intervalMs);
     }
-    
+
     stop() {
         if (this.intervalId) {
             clearInterval(this.intervalId);

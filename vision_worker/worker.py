@@ -29,11 +29,13 @@ class VisionWorker:
     def _parse_zones(self, zone_json):
         try:
             data = json.loads(zone_json)
-            polys = []
-            for item in data:
+            zones = []
+            for i, item in enumerate(data):
                 pts = np.array(item["points"], np.int32).reshape((-1, 1, 2))
-                polys.append(pts)
-            return polys
+                # Use provided 'id' or default to index-based ID
+                spot_id = item.get("id", f"spot_{i+1}")
+                zones.append({"id": spot_id, "poly": pts})
+            return zones
         except Exception as e:
             print(f"Error parsing zones: {e}")
             return []
@@ -81,11 +83,14 @@ class VisionWorker:
     def _analyze_and_report(self, model, frame):
         # Run inference
         results = model.predict(frame, classes=[2, 3, 5, 7], verbose=False)
-        occupied = 0
+        occupied_count = 0
+        spot_results = []
         
         if results:
             boxes = results[0].boxes
-            for poly in self.polygons:
+            for zone in self.polygons:
+                poly = zone["poly"]
+                spot_id = zone["id"]
                 is_occupied = False
                 for box in boxes:
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
@@ -93,21 +98,30 @@ class VisionWorker:
                     if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
                         is_occupied = True
                         break
+                
+                spot_results.append({
+                    "spot_id": spot_id,
+                    "occupied": is_occupied
+                })
+                
                 if is_occupied:
-                    occupied += 1
+                    occupied_count += 1
 
         # POST Telemetry
         payload = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "occupied_count": occupied,
-            "free_count": self.total_slots - occupied,
-            "total_slots": self.total_slots
+            "occupied_count": occupied_count,
+            "free_count": self.total_slots - occupied_count,
+            "total_slots": self.total_slots,
+            "metadata_json": {
+                "spot_details": spot_results
+            }
         }
         
         try:
             url = f"{self.api_endpoint}/cameras/{self.camera_id}/event"
             requests.post(url, json=payload, timeout=5)
-            print(f"Reported: {occupied}/{self.total_slots}")
+            print(f"Reported: {occupied_count}/{self.total_slots} (with per-spot data)")
         except Exception as e:
             print(f"Failed to report: {e}")
 

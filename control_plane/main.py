@@ -12,10 +12,11 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.db import get_db, engine
-from database.models import Base, Camera, OccupancyEvent, HealthLog
+from database.models import Base, Camera, OccupancyEvent, HealthLog, Location, Spot, SpotObservation
 from control_plane.schemas import (
     CameraCreate, CameraResponse, CameraUpdate, OccupancyUpdate, 
-    HealthUpdate, OccupancyEventResponse, CaptureFrameRequest, CaptureFrameResponse
+    HealthUpdate, OccupancyEventResponse, CaptureFrameRequest, CaptureFrameResponse,
+    LocationCreate, LocationResponse, SpotResponse
 )
 
 # Initialize database tables
@@ -26,6 +27,47 @@ app = FastAPI(title="Camera Control Plane")
 @app.get("/")
 async def root():
     return {"message": "Parking Management Control Plane Active"}
+
+# --- Locations ---
+
+@app.get("/locations", response_model=List[LocationResponse])
+def list_locations(db: Session = Depends(get_db)):
+    return db.query(Location).all()
+
+@app.post("/locations", response_model=LocationResponse, status_code=status.HTTP_201_CREATED)
+def create_location(location_in: LocationCreate, db: Session = Depends(get_db)):
+    db_location = Location(**location_in.model_dump())
+    db.add(db_location)
+    db.commit()
+    db.refresh(db_location)
+    return db_location
+
+@app.get("/locations/{location_id}", response_model=LocationResponse)
+def get_location(location_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_loc = db.query(Location).filter(Location.id == location_id).first()
+    if not db_loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return db_loc
+
+@app.get("/locations/{location_id}/status")
+def get_location_status(location_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Return the latest occupancy status for all spots in a location."""
+    spots = db.query(Spot).filter(Spot.location_id == location_id).all()
+    
+    results = []
+    for spot in spots:
+        # Get latest observation for this spot
+        latest_obs = db.query(SpotObservation).filter(SpotObservation.spot_id == spot.id).order_by(SpotObservation.timestamp.desc()).first()
+        results.append({
+            "spot_id": spot.id,
+            "name": spot.name,
+            "occupied": latest_obs.occupied if latest_obs else False,
+            "last_update": latest_obs.timestamp if latest_obs else None
+        })
+    
+    return results
+
+# --- Cameras ---
 
 @app.get("/cameras", response_model=List[CameraResponse])
 def list_cameras(db: Session = Depends(get_db)):
@@ -38,12 +80,39 @@ def list_events(camera_id: Optional[uuid.UUID] = None, limit: int = 100, db: Ses
         query = query.filter(OccupancyEvent.camera_id == camera_id)
     return query.order_by(OccupancyEvent.timestamp.desc()).limit(limit).all()
 
+def _sync_spots(db: Session, db_camera: Camera):
+    """Ensure all spots defined in camera geometry are registered in the spots table."""
+    if not db_camera.location_id or not db_camera.geometry:
+        return
+    
+    for zone in db_camera.geometry:
+        spot_id = zone.get("id")
+        if not spot_id:
+            continue
+            
+        # Check if spot exists
+        db_spot = db.query(Spot).filter(Spot.id == spot_id).first()
+        if not db_spot:
+            db_spot = Spot(
+                id=spot_id,
+                location_id=db_camera.location_id,
+                name=spot_id # Default name to ID
+            )
+            db.add(db_spot)
+        else:
+            # Ensure it's linked to the correct location (re-parenting if moved)
+            db_spot.location_id = db_camera.location_id
+    db.commit()
+
 @app.post("/cameras", response_model=CameraResponse, status_code=status.HTTP_201_CREATED)
 def create_camera(camera_in: CameraCreate, db: Session = Depends(get_db)):
     db_camera = Camera(**camera_in.model_dump())
     db.add(db_camera)
     db.commit()
     db.refresh(db_camera)
+    
+    _sync_spots(db, db_camera)
+    
     return db_camera
 
 @app.get("/cameras/{camera_id}", response_model=CameraResponse)
@@ -88,6 +157,18 @@ def camera_event(camera_id: uuid.UUID, update: OccupancyUpdate, db: Session = De
         metadata_json=update.metadata_json
     )
     db.add(event)
+    
+    # NEW: Populate spot_observations
+    if update.metadata_json and "spot_details" in update.metadata_json:
+        for spot in update.metadata_json["spot_details"]:
+            obs = SpotObservation(
+                spot_id=spot["spot_id"],
+                camera_id=camera_id,
+                occupied=1 if spot["occupied"] else 0, # Storing as int for potential aggregation
+                timestamp=update.timestamp
+            )
+            db.add(obs)
+
     db.commit()
     return {"received": True}
 
@@ -104,6 +185,11 @@ def update_camera(camera_id: uuid.UUID, camera_update: CameraUpdate, db: Session
     
     db.commit()
     db.refresh(db_camera)
+    
+    # Sync spots if location_id or geometry was updated
+    if "location_id" in update_data or "geometry" in update_data:
+        _sync_spots(db, db_camera)
+        
     return db_camera
 
 @app.delete("/cameras/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)

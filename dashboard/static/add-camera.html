@@ -81,6 +81,7 @@
             </div>
             <nav class="header-nav">
                 <a href="index.html" class="nav-tab">Live Monitor</a>
+                <a href="locations.html" class="nav-tab">Locations</a>
                 <a href="inspector.html" class="nav-tab">Data Inspector</a>
                 <a href="add-camera.html" class="nav-tab">Add Camera</a>
             </nav>
@@ -101,8 +102,10 @@
                     <input type="text" class="form-input" id="camera-name" value="New Camera">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="camera-location">Location</label>
-                    <input type="text" class="form-input" id="camera-location" value="Main Entry">
+                    <label class="form-label" for="camera-location-id">Location</label>
+                    <select class="form-select" id="camera-location-id">
+                        <option value="">-- No Location Linked --</option>
+                    </select>
                 </div>
             </div>
 
@@ -344,11 +347,15 @@
             objectsToRemove.forEach(obj => fabricCanvas.remove(obj));
 
             // Save zone
-            completedZones.push({ points: [...currentPoints] });
+            const spotId = prompt("Enter a name/ID for this parking spot:", `Spot ${completedZones.length + 1}`);
+            completedZones.push({
+                id: spotId || `Spot ${completedZones.length + 1}`,
+                points: [...currentPoints]
+            });
             currentPoints = [];
             updateZoneUI();
 
-            showToast(`Zone ${completedZones.length} defined`, 'success');
+            showToast(`Spot "${spotId}" defined`, 'success');
         }
 
         function undoLastPoint() {
@@ -406,6 +413,7 @@
             const scaleY = originalSize.height / 480;
 
             const scaledZones = completedZones.map(zone => ({
+                id: zone.id,
                 points: zone.points.map(p => [
                     Math.round(p.x * scaleX),
                     Math.round(p.y * scaleY)
@@ -414,7 +422,7 @@
 
             const payload = {
                 name: document.getElementById('camera-name').value,
-                location: document.getElementById('camera-location').value,
+                location_id: document.getElementById('camera-location-id').value || null,
                 stream_url: getStreamUrl(),
                 connection_type: document.getElementById('connection-type').value,
                 desired_state: 'running',
@@ -434,13 +442,29 @@
             }
         }
 
-        // Add input event listeners for URL preview
+        // Initial load
         document.addEventListener('DOMContentLoaded', () => {
             ['camera-ip', 'camera-user', 'camera-password'].forEach(id => {
                 document.getElementById(id).addEventListener('input', updateUrlPreview);
             });
             updateUrlPreview();
+            loadLocations();
         });
+
+        async function loadLocations() {
+            try {
+                const locations = await getLocations();
+                const select = document.getElementById('camera-location-id');
+                locations.forEach(loc => {
+                    const opt = document.createElement('option');
+                    opt.value = loc.id;
+                    opt.textContent = loc.name;
+                    select.appendChild(opt);
+                });
+            } catch (error) {
+                console.error('Failed to load locations', error);
+            }
+        }
     </script>
 </body>
 

@@ -62,6 +62,10 @@ async def serve_inspector():
 async def serve_add_camera():
     return FileResponse("static/add-camera.html")
 
+@app.get("/locations.html")
+async def serve_locations():
+    return FileResponse("static/locations.html")
+
 # Mount static files (CSS, JS, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
