@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Monitor | Parking Management</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-brand">
+                <h1>Parking Management</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="index.html" class="nav-tab">Live Monitor</a>
+                <a href="inspector.html" class="nav-tab">Data Inspector</a>
+                <a href="add-camera.html" class="nav-tab">Add Camera</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <h2 class="page-title">Live Camera Monitor</h2>
+        <p class="page-subtitle">Auto-refreshing every 10 seconds</p>
+
+        <!-- Metrics Row -->
+        <div class="metrics-row">
+            <div class="card metric-card">
+                <div class="metric-value" id="metric-total">-</div>
+                <div class="metric-label">Total Cameras</div>
+            </div>
+            <div class="card metric-card">
+                <div class="metric-value" id="metric-active">-</div>
+                <div class="metric-label">Active Streams</div>
+            </div>
+            <div class="card metric-card">
+                <div class="metric-value" id="metric-status">-</div>
+                <div class="metric-label">System Status</div>
+            </div>
+        </div>
+
+        <!-- Camera Grid -->
+        <div class="camera-grid" id="camera-grid">
+            <div class="card text-center text-muted" style="grid-column: 1 / -1; padding: 3rem;">
+                <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                Loading cameras...
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                Managed by the <strong>Town of Apex's IT Innovations</strong> division
+            </div>
+            <div class="footer-actions">
+                <span class="footer-version" id="app-version">v0.0.0</span>
+                <a href="mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard"
+                    class="btn-bug-report">
+                    Report Bug
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/shared.js"></script>
+    <script>
+        // ============================================
+        // Live Monitor Page Logic
+        // ============================================
+
+        async function loadCameras() {
+            try {
+                const cameras = await getCameras();
+                renderMetrics(cameras);
+                renderCameraGrid(cameras);
+            } catch (error) {
+                showToast('Failed to load cameras', 'error');
+                document.getElementById('camera-grid').innerHTML = `
+                    <div class="card text-center text-danger" style="grid-column: 1 / -1; padding: 2rem;">
+                        Failed to connect to Control Plane. Is the service running?
+                    </div>
+                `;
+            }
+        }
+
+        function renderMetrics(cameras) {
+            const total = cameras.length;
+            const active = cameras.filter(c => c.status === 'healthy').length;
+
+            document.getElementById('metric-total').textContent = total;
+            document.getElementById('metric-active').textContent = active;
+            document.getElementById('metric-status').textContent = total > 0 ? 'Online' : 'Offline';
+            document.getElementById('metric-status').style.color = total > 0 ? 'var(--color-primary)' : 'var(--color-danger)';
+        }
+
+        function renderCameraGrid(cameras) {
+            const grid = document.getElementById('camera-grid');
+
+            if (cameras.length === 0) {
+                grid.innerHTML = `
+                    <div class="card text-center text-muted" style="grid-column: 1 / -1; padding: 2rem;">
+                        No cameras registered yet. <a href="add-camera.html">Add one now</a>.
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = cameras.map(cam => {
+                const isHealthy = cam.status === 'healthy';
+                const isRunning = cam.desired_state === 'running';
+
+                return `
+                    <div class="card camera-card" data-camera-id="${cam.id}">
+                        <div class="card-header">
+                            <span class="card-title">
+                                <span class="status-indicator ${isHealthy ? 'healthy' : 'unhealthy'}"></span>
+                                ${escapeHtml(cam.name)}
+                            </span>
+                        </div>
+                        <div class="card-body camera-info">
+                            <div class="camera-info-row">
+                                <span class="camera-info-label">ID</span>
+                                <span class="camera-info-value">${cam.id}</span>
+                            </div>
+                            <div class="camera-info-row">
+                                <span class="camera-info-label">Location</span>
+                                <span class="camera-info-value">${escapeHtml(cam.location || 'N/A')}</span>
+                            </div>
+                            <div class="camera-info-row">
+                                <span class="camera-info-label">State</span>
+                                <span class="camera-info-value ${isRunning ? 'text-success' : 'text-muted'}">${isRunning ? 'Running' : 'Stopped'}</span>
+                            </div>
+                            <div class="camera-info-row">
+                                <span class="camera-info-label">Last Update</span>
+                                <span class="camera-info-value">${formatTimestamp(cam.last_event_time)}</span>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            ${isRunning
+                        ? `<button class="btn btn-secondary btn-sm" onclick="toggleCamera('${cam.id}', 'stopped')">Stop</button>`
+                        : `<button class="btn btn-primary btn-sm" onclick="toggleCamera('${cam.id}', 'running')">Start</button>`
+                    }
+                            <button class="btn btn-danger btn-sm" onclick="confirmDelete('${cam.id}', '${escapeHtml(cam.name)}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function toggleCamera(cameraId, newState) {
+            try {
+                await updateCamera(cameraId, { desired_state: newState });
+                showToast(`Camera ${newState === 'running' ? 'started' : 'stopped'}`, 'success');
+                loadCameras();
+            } catch (error) {
+                showToast(`Failed to update camera: ${error.message}`, 'error');
+            }
+        }
+
+        async function confirmDelete(cameraId, name) {
+            if (confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
+                try {
+                    await deleteCamera(cameraId);
+                    showToast('Camera deleted', 'success');
+                    loadCameras();
+                } catch (error) {
+                    showToast(`Failed to delete: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        // Start auto-refresh
+        const refresh = new AutoRefresh(loadCameras, 10000);
+        refresh.start();
+    </script>
+</body>
+
+</html>

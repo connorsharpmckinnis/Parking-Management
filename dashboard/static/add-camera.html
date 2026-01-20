@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Camera | Parking Management</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <style>
+        .canvas-container-wrapper {
+            border: 2px solid var(--color-border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            display: inline-block;
+            background: #000;
+        }
+
+        .zone-controls {
+            display: flex;
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-md);
+            flex-wrap: wrap;
+        }
+
+        .zone-info {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--color-bg);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+        }
+
+        .url-preview {
+            font-family: monospace;
+            font-size: var(--font-size-sm);
+            color: var(--color-muted);
+            background: var(--color-bg);
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-radius: var(--radius-md);
+            word-break: break-all;
+        }
+
+        .drawing-instructions {
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            color: white;
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .drawing-instructions h4 {
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background: var(--color-sunflower-gold);
+            color: var(--color-black);
+            border-radius: 50%;
+            font-weight: 600;
+            font-size: var(--font-size-sm);
+            margin-right: var(--spacing-sm);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-brand">
+                <h1>Parking Management</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="index.html" class="nav-tab">Live Monitor</a>
+                <a href="inspector.html" class="nav-tab">Data Inspector</a>
+                <a href="add-camera.html" class="nav-tab">Add Camera</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <h2 class="page-title">Add Camera</h2>
+        <p class="page-subtitle">Register a new camera and define parking zones</p>
+
+        <div class="card mb-lg">
+            <h3 class="card-title mb-md"><span class="step-badge">1</span> Camera Details</h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="camera-name">Camera Name</label>
+                    <input type="text" class="form-input" id="camera-name" value="New Camera">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="camera-location">Location</label>
+                    <input type="text" class="form-input" id="camera-location" value="Main Entry">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="camera-ip">IP Address</label>
+                    <input type="text" class="form-input" id="camera-ip" value="10.9.4.215">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="camera-user">Username</label>
+                    <input type="text" class="form-input" id="camera-user" value="connor">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="camera-password">Password</label>
+                    <input type="password" class="form-input" id="camera-password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="connection-type">Connection Type</label>
+                    <select class="form-select" id="connection-type">
+                        <option value="fiber">Fiber</option>
+                        <option value="edge">Edge</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Stream URL Preview</label>
+                <div class="url-preview" id="url-preview">http://connor:****@10.9.4.215/axis-cgi/media.cgi?...</div>
+            </div>
+
+            <button class="btn btn-primary" id="capture-btn" onclick="captureFrameFromStream()">
+                Capture Frame from Stream
+            </button>
+        </div>
+
+        <div class="card mb-lg" id="drawing-section" style="display: none;">
+            <h3 class="card-title mb-md"><span class="step-badge">2</span> Define Parking Zones</h3>
+
+            <div class="drawing-instructions">
+                <h4>Instructions</h4>
+                <p>Click 4 corners to define each parking space. Zones are saved automatically when complete.</p>
+            </div>
+
+            <div class="canvas-container-wrapper">
+                <canvas id="zone-canvas" width="640" height="480"></canvas>
+            </div>
+
+            <div class="zone-controls">
+                <div class="zone-info">
+                    Points: <strong id="point-count">0</strong> / 4
+                </div>
+                <div class="zone-info">
+                    Completed Zones: <strong id="zone-count">0</strong>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="undoLastPoint()">Undo Point</button>
+                <button class="btn btn-danger btn-sm" onclick="clearAllZones()">Clear All</button>
+            </div>
+        </div>
+
+        <div class="card" id="register-section" style="display: none;">
+            <h3 class="card-title mb-md"><span class="step-badge">3</span> Register Camera</h3>
+            <p class="text-muted mb-md">Review your settings and click below to register the camera with the system.</p>
+            <button class="btn btn-primary btn-block" onclick="registerCamera()">
+                Register Camera
+            </button>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                Managed by the <strong>Town of Apex's IT Innovations</strong> division
+            </div>
+            <div class="footer-actions">
+                <span class="footer-version" id="app-version">v0.0.0</span>
+                <a href="mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard"
+                    class="btn-bug-report">
+                    Report Bug
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/shared.js"></script>
+    <script>
+        // ============================================
+        // Add Camera Page Logic
+        // ============================================
+
+        let fabricCanvas = null;
+        let currentPoints = [];
+        let completedZones = [];
+        let capturedImageUrl = null;
+        let originalSize = { width: 640, height: 480 };
+
+        // Update URL preview on input change
+        function updateUrlPreview() {
+            const ip = document.getElementById('camera-ip').value;
+            const user = document.getElementById('camera-user').value;
+            const pwd = document.getElementById('camera-password').value;
+            const masked = '*'.repeat(pwd.length || 4);
+            document.getElementById('url-preview').textContent =
+                `http://${user}:${masked}@${ip}/axis-cgi/media.cgi?container=mp4&video=1&audio=0&videocodec=h264`;
+        }
+
+        function getStreamUrl() {
+            const ip = document.getElementById('camera-ip').value;
+            const user = document.getElementById('camera-user').value;
+            const pwd = document.getElementById('camera-password').value;
+            return `http://${user}:${pwd}@${ip}/axis-cgi/media.cgi?container=mp4&video=1&audio=0&videocodec=h264`;
+        }
+
+        // Capture frame from stream
+        async function captureFrameFromStream() {
+            const btn = document.getElementById('capture-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Connecting...';
+
+            try {
+                const result = await captureFrame(getStreamUrl());
+
+                // result should contain { image_base64, width, height }
+                capturedImageUrl = 'data:image/jpeg;base64,' + result.image_base64;
+                originalSize = { width: result.width, height: result.height };
+
+                initCanvas(capturedImageUrl);
+                document.getElementById('drawing-section').style.display = 'block';
+                document.getElementById('register-section').style.display = 'block';
+                showToast('Frame captured successfully', 'success');
+            } catch (error) {
+                showToast('Failed to capture frame: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Capture Frame from Stream';
+            }
+        }
+
+        // Initialize Fabric.js canvas
+        function initCanvas(imageUrl) {
+            if (fabricCanvas) {
+                fabricCanvas.dispose();
+            }
+
+            fabricCanvas = new fabric.Canvas('zone-canvas', {
+                selection: false
+            });
+
+            fabric.Image.fromURL(imageUrl, (img) => {
+                img.scaleToWidth(640);
+                img.scaleToHeight(480);
+                fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
+            });
+
+            fabricCanvas.on('mouse:down', handleCanvasClick);
+
+            // Reset state
+            currentPoints = [];
+            completedZones = [];
+            updateZoneUI();
+        }
+
+        function handleCanvasClick(event) {
+            const pointer = fabricCanvas.getPointer(event.e);
+            const x = Math.round(pointer.x);
+            const y = Math.round(pointer.y);
+
+            // Add point marker
+            const circle = new fabric.Circle({
+                left: x - 5,
+                top: y - 5,
+                radius: 5,
+                fill: '#f1be48',
+                stroke: '#000',
+                strokeWidth: 1,
+                selectable: false,
+                evented: false,
+                originX: 'center',
+                originY: 'center',
+                data: { type: 'point', index: currentPoints.length }
+            });
+            fabricCanvas.add(circle);
+
+            // Add line to previous point
+            if (currentPoints.length > 0) {
+                const prevPt = currentPoints[currentPoints.length - 1];
+                const line = new fabric.Line([prevPt.x, prevPt.y, x, y], {
+                    stroke: '#f1be48',
+                    strokeWidth: 2,
+                    selectable: false,
+                    evented: false,
+                    data: { type: 'line' }
+                });
+                fabricCanvas.add(line);
+            }
+
+            currentPoints.push({ x, y });
+            updateZoneUI();
+
+            // Check if zone is complete (4 points)
+            if (currentPoints.length === 4) {
+                completeZone();
+            }
+        }
+
+        function completeZone() {
+            // Draw closing line
+            const firstPt = currentPoints[0];
+            const lastPt = currentPoints[3];
+            const closingLine = new fabric.Line([lastPt.x, lastPt.y, firstPt.x, firstPt.y], {
+                stroke: '#44883e',
+                strokeWidth: 2,
+                selectable: false,
+                evented: false,
+                data: { type: 'zone-line' }
+            });
+            fabricCanvas.add(closingLine);
+
+            // Create filled polygon
+            const polygon = new fabric.Polygon(currentPoints.map(p => ({ x: p.x, y: p.y })), {
+                fill: 'rgba(68, 136, 62, 0.3)',
+                stroke: '#44883e',
+                strokeWidth: 2,
+                selectable: false,
+                evented: false,
+                data: { type: 'zone' }
+            });
+            fabricCanvas.add(polygon);
+
+            // Clear temporary drawing elements (points and yellow lines)
+            const objectsToRemove = fabricCanvas.getObjects().filter(obj =>
+                obj.data && (obj.data.type === 'point' || obj.data.type === 'line')
+            );
+            objectsToRemove.forEach(obj => fabricCanvas.remove(obj));
+
+            // Save zone
+            completedZones.push({ points: [...currentPoints] });
+            currentPoints = [];
+            updateZoneUI();
+
+            showToast(`Zone ${completedZones.length} defined`, 'success');
+        }
+
+        function undoLastPoint() {
+            if (currentPoints.length === 0) return;
+
+            // Remove last point and line
+            const objects = fabricCanvas.getObjects();
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                if (obj.data && (obj.data.type === 'point' || obj.data.type === 'line')) {
+                    fabricCanvas.remove(obj);
+                    break;
+                }
+            }
+            // Also remove the point circle
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                if (obj.data && obj.data.type === 'point') {
+                    fabricCanvas.remove(obj);
+                    break;
+                }
+            }
+
+            currentPoints.pop();
+            updateZoneUI();
+        }
+
+        function clearAllZones() {
+            if (!confirm('Clear all zones?')) return;
+
+            // Remove all zone-related objects
+            const objectsToRemove = fabricCanvas.getObjects().filter(obj =>
+                obj.data && ['point', 'line', 'zone', 'zone-line'].includes(obj.data.type)
+            );
+            objectsToRemove.forEach(obj => fabricCanvas.remove(obj));
+
+            currentPoints = [];
+            completedZones = [];
+            updateZoneUI();
+        }
+
+        function updateZoneUI() {
+            document.getElementById('point-count').textContent = currentPoints.length;
+            document.getElementById('zone-count').textContent = completedZones.length;
+        }
+
+        // Register camera
+        async function registerCamera() {
+            if (completedZones.length === 0) {
+                showToast('Please define at least one parking zone', 'error');
+                return;
+            }
+
+            const scaleX = originalSize.width / 640;
+            const scaleY = originalSize.height / 480;
+
+            const scaledZones = completedZones.map(zone => ({
+                points: zone.points.map(p => [
+                    Math.round(p.x * scaleX),
+                    Math.round(p.y * scaleY)
+                ])
+            }));
+
+            const payload = {
+                name: document.getElementById('camera-name').value,
+                location: document.getElementById('camera-location').value,
+                stream_url: getStreamUrl(),
+                connection_type: document.getElementById('connection-type').value,
+                desired_state: 'running',
+                geometry: scaledZones
+            };
+
+            try {
+                await createCamera(payload);
+                showToast('Camera registered successfully!', 'success');
+
+                // Reset form after short delay
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1500);
+            } catch (error) {
+                showToast('Failed to register: ' + error.message, 'error');
+            }
+        }
+
+        // Add input event listeners for URL preview
+        document.addEventListener('DOMContentLoaded', () => {
+            ['camera-ip', 'camera-user', 'camera-password'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateUrlPreview);
+            });
+            updateUrlPreview();
+        });
+    </script>
+</body>
+
+</html>

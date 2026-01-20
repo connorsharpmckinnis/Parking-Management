@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Parking Manager</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Auto-refresh logs every 10 seconds could be done via JS, but for simplicity just meta refresh or JS fetch later. 
+         Let's stick to simple HTML/JS. -->
+</head>
+<body>
+    <header>
+        <h1>Parking Manager</h1>
+        <p style="color: #8b949e; margin-top: 0.5rem;">Intelligent Occupancy Tracking System</p>
+    </header>
+
+    <div class="container">
+        <!-- Configuration Card -->
+        <div class="card">
+            <h2>
+                {% if running %}
+                    <span class="status-indicator status-active"></span> System Active
+                {% else %}
+                    <span class="status-indicator status-inactive"></span> System Idle
+                {% endif %}
+            </h2>
+            
+            {% if not running %}
+            <form action="/configure" method="post">
+                <div class="form-group">
+                    <label>Camera IP Address</label>
+                    <input type="text" name="ip" placeholder="e.g. 10.9.4.215" required>
+                </div>
+                <div class="form-group">
+                    <label>Username (Optional)</label>
+                    <input type="text" name="username" placeholder="admin">
+                </div>
+                <div class="form-group">
+                    <label>Password (Optional)</label>
+                    <input type="password" name="password" placeholder="••••••">
+                </div>
+                <div class="form-group">
+                    <label>Log Interval (Seconds)</label>
+                    <input type="number" name="interval" value="5" min="1">
+                </div>
+                <button type="submit" class="btn btn-primary">Start Monitoring</button>
+            </form>
+            {% else %}
+            <div style="text-align: center; padding: 2rem;">
+                <p>Monitoring is in progress.</p>
+                <form action="/stop" method="post">
+                    <button type="submit" class="btn btn-danger">Stop System</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Live Feed Card -->
+        <div class="card">
+            <h2>Live Analysis</h2>
+            <div class="video-container">
+                {% if running %}
+                    <img src="/video_feed" alt="Live Parking Feed">
+                    <div style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; border: 1px solid rgba(255,0,0,0.4);">
+                        <span class="recording-dot"></span> LIVE
+                    </div>
+                {% else %}
+                    <div style="color: #6e7681; display: flex; flex-direction: column; align-items: center;">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                            <line x1="7" y1="2" x2="7" y2="22"></line>
+                            <line x1="17" y1="2" x2="17" y2="22"></line>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <line x1="2" y1="7" x2="7" y2="7"></line>
+                            <line x1="2" y1="17" x2="7" y2="17"></line>
+                            <line x1="17" y1="17" x2="22" y2="17"></line>
+                            <line x1="17" y1="7" x2="22" y2="7"></line>
+                        </svg>
+                        <p style="margin-top: 1rem;">No Active Stream</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Logs Card -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Recent Logs</h2>
+                <a href="/" style="color: var(--primary); text-decoration: none; font-size: 0.9rem;">Refresh Data ⟳</a>
+            </div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Timestamp</th>
+                            <th>Occupied</th>
+                            <th>Free</th>
+                            <th>Total Slots</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td>{{ log[0] }}</td>
+                            <td>{{ log[1] }}</td>
+                            <td style="color: #fca5a5;">{{ log[2] }}</td>
+                            <td style="color: #86efac;">{{ log[3] }}</td>
+                            <td>{{ log[4] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

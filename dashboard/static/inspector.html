@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Inspector | Parking Management</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-brand">
+                <h1>Parking Management</h1>
+            </div>
+            <nav class="header-nav">
+                <a href="index.html" class="nav-tab">Live Monitor</a>
+                <a href="inspector.html" class="nav-tab">Data Inspector</a>
+                <a href="add-camera.html" class="nav-tab">Add Camera</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <h2 class="page-title">Data Inspector</h2>
+        <p class="page-subtitle">Auto-refreshing every 10 seconds</p>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-cameras">Cameras</button>
+            <button class="tab-btn" data-tab="tab-events">Occupancy Events</button>
+        </div>
+
+        <!-- Tab: Cameras -->
+        <div id="tab-cameras" class="tab-content active">
+            <div class="card">
+                <h3 class="card-title mb-md">Registered Cameras</h3>
+                <div class="table-container">
+                    <table class="data-table" id="cameras-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Location</th>
+                                <th>Connection</th>
+                                <th>Status</th>
+                                <th>Desired State</th>
+                                <th>Last Event</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cameras-tbody">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Occupancy Events -->
+        <div id="tab-events" class="tab-content">
+            <div class="card">
+                <h3 class="card-title mb-md">Recent Occupancy Events</h3>
+                <div class="table-container">
+                    <table class="data-table" id="events-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Camera ID</th>
+                                <th>Timestamp</th>
+                                <th>Occupied</th>
+                                <th>Free</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-tbody">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                Managed by the <strong>Town of Apex's IT Innovations</strong> division
+            </div>
+            <div class="footer-actions">
+                <span class="footer-version" id="app-version">v0.0.0</span>
+                <a href="mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard"
+                    class="btn-bug-report">
+                    Report Bug
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/shared.js"></script>
+    <script>
+        // ============================================
+        // Data Inspector Page Logic
+        // ============================================
+
+        async function loadData() {
+            await Promise.all([loadCameras(), loadEvents()]);
+        }
+
+        async function loadCameras() {
+            try {
+                const cameras = await getCameras();
+                renderCamerasTable(cameras);
+            } catch (error) {
+                document.getElementById('cameras-tbody').innerHTML =
+                    `<tr><td colspan="7" class="text-center text-danger">Failed to load cameras</td></tr>`;
+            }
+        }
+
+        async function loadEvents() {
+            try {
+                const events = await getEvents(100);
+                renderEventsTable(events);
+            } catch (error) {
+                document.getElementById('events-tbody').innerHTML =
+                    `<tr><td colspan="6" class="text-center text-danger">Failed to load events</td></tr>`;
+            }
+        }
+
+        function renderCamerasTable(cameras) {
+            const tbody = document.getElementById('cameras-tbody');
+
+            if (cameras.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No cameras registered</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = cameras.map(cam => `
+                <tr>
+                    <td>${cam.id}</td>
+                    <td>${escapeHtml(cam.name)}</td>
+                    <td>${escapeHtml(cam.location || 'N/A')}</td>
+                    <td>${escapeHtml(cam.connection_type || 'N/A')}</td>
+                    <td class="${cam.status === 'healthy' ? 'text-success' : 'text-danger'}">${cam.status || 'unknown'}</td>
+                    <td>${cam.desired_state || 'stopped'}</td>
+                    <td>${formatTimestamp(cam.last_event_time)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderEventsTable(events) {
+            const tbody = document.getElementById('events-tbody');
+
+            if (events.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No events recorded yet</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = events.map(evt => `
+                <tr>
+                    <td>${evt.id}</td>
+                    <td>${evt.camera_id}</td>
+                    <td>${formatTimestamp(evt.timestamp)}</td>
+                    <td>${evt.occupied_count ?? 'N/A'}</td>
+                    <td>${evt.free_count ?? 'N/A'}</td>
+                    <td>${evt.total_slots ?? 'N/A'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Initialize tabs and auto-refresh
+        document.addEventListener('DOMContentLoaded', () => {
+            initTabs();
+            const refresh = new AutoRefresh(loadData, 10000);
+            refresh.start();
+        });
+    </script>
+</body>
+
+</html>

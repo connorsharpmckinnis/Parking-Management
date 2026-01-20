@@ -1,0 +1,104 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: parking-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: parking_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - parking_data:/var/lib/postgresql/data
+    networks:
+      - parking-net
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: control_plane/Dockerfile
+    container_name: parking-control-plane
+    environment:
+      DATABASE_URL: postgresql://admin:password@db:5432/parking_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - parking-net
+    volumes:
+      # --- DEV VOLUMES: Remove for production ---
+      - ./control_plane:/app/control_plane
+      - ./database:/app/database
+      # ------------------------------------------
+
+  ingest-service:
+    build:
+      context: ./ingest_service
+      dockerfile: Dockerfile
+    container_name: parking-ingest-service
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8000
+    ports:
+      - "8001:8001"
+    depends_on:
+      - control-plane
+    networks:
+      - parking-net
+    volumes:
+      # --- DEV VOLUMES: Remove for production ---
+      - ./ingest_service:/app
+      # ------------------------------------------
+
+  dashboard:
+    build: ./dashboard
+    container_name: parking-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8000
+    depends_on:
+      - control-plane
+    networks:
+      - parking-net
+    volumes:
+      # --- DEV VOLUMES: Remove for production ---
+      - ./dashboard:/app
+      # ------------------------------------------
+
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: parking-orchestrator
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8000
+      WORKER_IMAGE: parking-vision-worker:latest
+    volumes:
+      # --- DEV VOLUMES: Remove for production ---
+      - ./orchestrator:/app
+      # ------------------------------------------
+      # Access to Docker socket (Windows Docker Desktop usually puts it here or at //var/run/docker.sock)
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - control-plane
+    networks:
+      - parking-net
+
+  vision-worker:
+    image: parking-vision-worker:latest
+    build:
+      context: ./vision_worker
+      dockerfile: Dockerfile
+    deploy:
+      mode: replicated
+      replicas: 0 # We don't want Compose to start this, the Orchestrator does
+    networks:
+      - parking-net
+
+networks:
+  parking-net:
+    driver: bridge
+
+volumes:
+  parking_data:
