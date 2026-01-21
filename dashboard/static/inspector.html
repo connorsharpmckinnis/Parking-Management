@@ -210,7 +210,7 @@
                         <td>${evt.total_slots ?? 'N/A'}</td>
                         <td>
                             ${hasDetails
-                        ? `<button class="btn btn-primary btn-sm" onclick='showDetails(${detailsJson})'>View Spots</button>`
+                        ? `<button class="btn btn-primary btn-sm" onclick='showDetails(${detailsJson}, "${evt.camera_id}")'>View Spots</button>`
                         : `<span class="text-muted">No data</span>`
                     }
                         </td>
@@ -219,44 +219,56 @@
             }).join('');
         }
 
-        function showDetails(spots) {
+        async function showDetails(spots, cameraId) {
             const modal = document.getElementById('modal-details');
             const body = document.getElementById('modal-body');
 
-            if (!spots || spots.length === 0) {
-                body.innerHTML = '<p class="text-muted">No granular spot data available for this event.</p>';
-            } else {
-                body.innerHTML = `
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
+            modal.style.display = 'block';
+            body.innerHTML = `
+                <div class="camera-snapshot-container mb-md">
+                    <img src="" class="camera-snapshot-img" id="modal-snapshot" alt="Live View">
+                    <div class="snapshot-overlay">Loading Snapshot...</div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Spot ID</th>
+                                <th>Status (at time of event)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${spots.map(spot => `
                                 <tr>
-                                    <th>Spot ID</th>
-                                    <th>Status</th>
+                                    <td><code>${escapeHtml(spot.spot_id)}</code></td>
+                                    <td>
+                                        <span class="badge ${spot.occupied ? 'badge-danger' : 'badge-success'}">
+                                            ${spot.occupied ? 'Occupied' : 'Available'}
+                                        </span>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                ${spots.map(spot => `
-                                    <tr>
-                                        <td>${escapeHtml(spot.spot_id)}</td>
-                                        <td>
-                                            <span class="badge ${spot.occupied ? 'badge-danger' : 'badge-success'}">
-                                                ${spot.occupied ? 'Occupied' : 'Available'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-            }
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
 
-            modal.classList.add('active');
+            // Load live snapshot
+            try {
+                const data = await getCameraSnapshot(cameraId);
+                const img = document.getElementById('modal-snapshot');
+                if (img) {
+                    img.src = `data:image/jpeg;base64,${data.image_base64}`;
+                    img.parentElement.querySelector('.snapshot-overlay').style.display = 'none';
+                }
+            } catch (error) {
+                const overlay = document.querySelector('#modal-snapshot')?.parentElement.querySelector('.snapshot-overlay');
+                if (overlay) overlay.textContent = 'Snapshot Unavailable';
+            }
         }
 
         function closeModal() {
-            document.getElementById('modal-details').classList.remove('active');
+            document.getElementById('modal-details').style.display = 'none';
         }
 
         // Initialize tabs and auto-refresh

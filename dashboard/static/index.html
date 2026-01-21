@@ -83,6 +83,7 @@
         // ============================================
 
         let locationsMap = {};
+        let lastSnapshots = {}; // Cache for images
 
         async function loadCameras() {
             try {
@@ -134,6 +135,7 @@
             grid.innerHTML = cameras.map(cam => {
                 const isHealthy = cam.status === 'healthy';
                 const isRunning = cam.desired_state === 'running';
+                const existingSnap = lastSnapshots[cam.id];
 
                 return `
                     <div class="card camera-card" data-camera-id="${cam.id}">
@@ -142,6 +144,12 @@
                                 <span class="status-indicator ${isHealthy ? 'healthy' : 'unhealthy'}"></span>
                                 ${escapeHtml(cam.name)}
                             </span>
+                        </div>
+                        <div class="camera-snapshot-container" id="snap-container-${cam.id}">
+                            <img src="${existingSnap ? 'data:image/jpeg;base64,' + existingSnap : ''}" 
+                                 class="camera-snapshot-img" id="snap-${cam.id}" alt="Live Preview"
+                                 style="${existingSnap ? '' : 'display:none'}">
+                            <div class="snapshot-overlay" style="${existingSnap ? 'display:none' : ''}">Loading Snapshot...</div>
                         </div>
                         <div class="card-body camera-info">
                             <div class="camera-info-row">
@@ -195,9 +203,32 @@
             }
         }
 
+        async function updateSnapshots() {
+            const snapImages = document.querySelectorAll('.camera-snapshot-img');
+            for (const img of snapImages) {
+                const cameraId = img.id.replace('snap-', '');
+                try {
+                    const data = await getCameraSnapshot(cameraId);
+                    lastSnapshots[cameraId] = data.image_base64;
+                    img.src = `data:image/jpeg;base64,${data.image_base64}`;
+                    img.style.display = 'block';
+                    img.parentElement.querySelector('.snapshot-overlay').style.display = 'none';
+                } catch (error) {
+                    console.warn(`Failed to update snapshot for ${cameraId}`);
+                    img.parentElement.querySelector('.snapshot-overlay').textContent = 'Stream Offline';
+                }
+            }
+        }
+
         // Start auto-refresh
         const refresh = new AutoRefresh(loadCameras, 10000);
         refresh.start();
+
+        // Separate refresh for snapshots (every 60s as requested)
+        setInterval(updateSnapshots, 60000);
+
+        // Initial snapshot load (slight delay to let grid render)
+        setTimeout(updateSnapshots, 1000);
     </script>
 </body>
 

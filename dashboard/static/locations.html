@@ -59,7 +59,7 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th width="100">Actions</th>
+                                <th width="150">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="locations-tbody">
@@ -90,6 +90,11 @@
                             <div class="metric-value" id="loc-free-spots">-</div>
                             <div class="metric-label">Available</div>
                         </div>
+                    </div>
+
+                    <h4>Live Camera Views</h4>
+                    <div id="location-snapshots" class="location-snapshots-grid mb-md">
+                        <div class="text-center text-muted">Retrieving camera snapshots...</div>
                     </div>
 
                     <h4>Spot-Level Status</h4>
@@ -152,9 +157,26 @@
                     <td>${escapeHtml(loc.name)}</td>
                     <td>
                         <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); viewLocation('${loc.id}', '${loc.name}')">View</button>
+                        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); confirmDeleteLocation('${loc.id}', '${escapeHtml(loc.name)}')">Delete</button>
                     </td>
                 </tr>
             `).join('');
+        }
+
+        async function confirmDeleteLocation(id, name) {
+            if (confirm(`Are you sure you want to delete "${name}"? This will unlink all cameras from this location.`)) {
+                try {
+                    await deleteLocation(id);
+                    showToast('Location deleted', 'success');
+                    if (selectedLocationId === id) {
+                        selectedLocationId = null;
+                        document.getElementById('location-details').style.display = 'none';
+                    }
+                    loadLocations();
+                } catch (error) {
+                    showToast(`Failed to delete: ${error.message}`, 'error');
+                }
+            }
         }
 
         async function handleAddLocation(event) {
@@ -185,6 +207,50 @@
             });
 
             refreshLocationStatus();
+            loadLocationSnapshots(id);
+        }
+
+        async function loadLocationSnapshots(locationId) {
+            const container = document.getElementById('location-snapshots');
+            try {
+                const cameras = await getCameras();
+                const filtered = cameras.filter(c => c.location_id === locationId);
+
+                if (filtered.length === 0) {
+                    container.innerHTML = '<div class="text-muted">No cameras linked to this location.</div>';
+                    return;
+                }
+
+                container.innerHTML = filtered.map(cam => `
+                    <div class="card p-0 overflow-hidden" style="margin-bottom: 0">
+                        <div class="camera-snapshot-container">
+                            <img src="" class="camera-snapshot-img" id="loc-snap-${cam.id}" alt="${escapeHtml(cam.name)}">
+                            <div class="snapshot-overlay">Loading ${escapeHtml(cam.name)}...</div>
+                        </div>
+                        <div class="p-xs text-center border-top">
+                            <small class="text-muted">${escapeHtml(cam.name)}</small>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Load individual images
+                filtered.forEach(async cam => {
+                    try {
+                        const data = await getCameraSnapshot(cam.id);
+                        const img = document.getElementById(`loc-snap-${cam.id}`);
+                        if (img) {
+                            img.src = `data:image/jpeg;base64,${data.image_base64}`;
+                            img.parentElement.querySelector('.snapshot-overlay').style.display = 'none';
+                        }
+                    } catch (e) {
+                        const overlay = document.getElementById(`loc-snap-${cam.id}`)?.parentElement.querySelector('.snapshot-overlay');
+                        if (overlay) overlay.textContent = 'Offline';
+                    }
+                });
+
+            } catch (error) {
+                container.innerHTML = '<div class="text-danger">Failed to load camera data.</div>';
+            }
         }
 
         async function refreshLocationStatus() {
@@ -281,6 +347,33 @@
         .badge-success {
             background: #dcfce7;
             color: #166534;
+        }
+
+        .location-snapshots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .p-xs {
+            padding: 0.5rem;
+        }
+
+        .p-0 {
+            padding: 0 !important;
+        }
+
+        .overflow-hidden {
+            overflow: hidden;
+        }
+
+        .border-top {
+            border-top: 1px solid var(--color-border);
+        }
+
+        .mb-md {
+            margin-bottom: 1.5rem;
         }
     </style>
 </body>

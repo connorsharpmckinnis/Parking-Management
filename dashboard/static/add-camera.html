@@ -153,7 +153,7 @@
             </div>
 
             <div class="canvas-container-wrapper">
-                <canvas id="zone-canvas" width="640" height="480"></canvas>
+                <canvas id="zone-canvas"></canvas>
             </div>
 
             <div class="zone-controls">
@@ -205,7 +205,7 @@
         let currentPoints = [];
         let completedZones = [];
         let capturedImageUrl = null;
-        let originalSize = { width: 640, height: 480 };
+        let originalSize = { width: 1, height: 1 };
 
         // Update URL preview on input change
         function updateUrlPreview() {
@@ -255,13 +255,28 @@
                 fabricCanvas.dispose();
             }
 
+            // Set display size based on original aspect ratio
+            const displayWidth = 800; // Fixed width for UI
+            const aspectRatio = originalSize.height / originalSize.width;
+            const displayHeight = displayWidth * aspectRatio;
+
+            const el = document.getElementById('zone-canvas');
+            el.width = displayWidth;
+            el.height = displayHeight;
+
             fabricCanvas = new fabric.Canvas('zone-canvas', {
-                selection: false
+                selection: false,
+                width: displayWidth,
+                height: displayHeight
             });
 
             fabric.Image.fromURL(imageUrl, (img) => {
-                img.scaleToWidth(640);
-                img.scaleToHeight(480);
+                img.set({
+                    scaleX: displayWidth / originalSize.width,
+                    scaleY: displayHeight / originalSize.height,
+                    originX: 'left',
+                    originY: 'top'
+                });
                 fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
             });
 
@@ -409,8 +424,8 @@
                 return;
             }
 
-            const scaleX = originalSize.width / 640;
-            const scaleY = originalSize.height / 480;
+            const scaleX = originalSize.width / fabricCanvas.width;
+            const scaleY = originalSize.height / fabricCanvas.height;
 
             const scaledZones = completedZones.map(zone => ({
                 id: zone.id,

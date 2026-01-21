@@ -110,6 +110,12 @@ async function createLocation(name) {
     });
 }
 
+async function deleteLocation(locationId) {
+    return await apiRequest(`/locations/${locationId}`, {
+        method: 'DELETE'
+    });
+}
+
 async function getLocationStatus(locationId) {
     return await apiRequest(`/locations/${locationId}/status`);
 }
@@ -136,6 +142,10 @@ async function createCamera(data) {
         method: 'POST',
         body: JSON.stringify(data)
     });
+}
+
+async function getCameraSnapshot(cameraId) {
+    return await apiRequest(`/cameras/${cameraId}/snapshot`);
 }
 
 async function captureFrame(streamUrl) {

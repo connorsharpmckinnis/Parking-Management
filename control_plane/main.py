@@ -4,6 +4,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
 import cv2
+import numpy as np
 import base64
 
 # Path hack for POC
@@ -48,6 +49,28 @@ def get_location(location_id: uuid.UUID, db: Session = Depends(get_db)):
     if not db_loc:
         raise HTTPException(status_code=404, detail="Location not found")
     return db_loc
+
+@app.delete("/locations/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_location(location_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Delete a location. Note: This will unlink cameras and potentially delete spots."""
+    db_location = db.query(Location).filter(Location.id == location_id).first()
+    if not db_location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    
+    # 1. Unlink cameras (set location_id to null)
+    db.query(Camera).filter(Camera.location_id == location_id).update({Camera.location_id: None})
+    
+    # 2. Delete spots associated with this location
+    db.query(SpotObservation).filter(SpotObservation.spot_id.in_(
+        db.query(Spot.id).filter(Spot.location_id == location_id)
+    )).delete(synchronize_session=False)
+    
+    db.query(Spot).filter(Spot.location_id == location_id).delete()
+    
+    # 3. Delete the location
+    db.delete(db_location)
+    db.commit()
+    return None
 
 @app.get("/locations/{location_id}/status")
 def get_location_status(location_id: uuid.UUID, db: Session = Depends(get_db)):
@@ -199,9 +222,10 @@ def delete_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
     if not db_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # Delete related events and logs first (or rely on CASCADE if set up)
+    # Delete related data first
     db.query(OccupancyEvent).filter(OccupancyEvent.camera_id == camera_id).delete()
     db.query(HealthLog).filter(HealthLog.camera_id == camera_id).delete()
+    db.query(SpotObservation).filter(SpotObservation.camera_id == camera_id).delete()
     
     db.delete(db_camera)
     db.commit()
@@ -236,6 +260,61 @@ def capture_frame_endpoint(request: CaptureFrameRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Frame capture error: {str(e)}")
+
+@app.get("/cameras/{camera_id}/snapshot", response_model=CaptureFrameResponse)
+def get_camera_snapshot(camera_id: uuid.UUID, annotate: bool = True, db: Session = Depends(get_db)):
+    """Fetch a live frame from the camera and optionally annotate it with spot zones."""
+    db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    try:
+        cap = cv2.VideoCapture(db_camera.stream_url)
+        if not cap.isOpened():
+            raise HTTPException(status_code=400, detail="Could not open stream")
+        
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret:
+            raise HTTPException(status_code=400, detail="Failed to read frame from stream")
+        
+        if annotate and db_camera.geometry:
+            for zone in db_camera.geometry:
+                points = np.array(zone['points'], np.int32)
+                # Draw polygon
+                cv2.polylines(frame, [points], True, (0, 255, 0), 2)
+                
+                # Draw ID in center
+                if 'id' in zone:
+                    M = cv2.moments(points)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                    else:
+                        # Fallback to mean if moments fail
+                        cx, cy = np.mean(points, axis=0).astype(int)
+                    
+                    text = str(zone['id'])
+                    # Simple text with background for readability
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    scale = 0.5
+                    thickness = 1
+                    (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
+                    cv2.rectangle(frame, (cx - tw//2 - 2, cy - th//2 - 2), (cx + tw//2 + 2, cy + th//2 + 2), (0, 0, 0), -1)
+                    cv2.putText(frame, text, (cx - tw//2, cy + th//2), font, scale, (255, 255, 255), thickness)
+
+        height, width = frame.shape[:2]
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        return CaptureFrameResponse(
+            image_base64=image_base64,
+            width=width,
+            height=height
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Snapshot error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
