@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.db import get_db, engine
-from database.models import Base, Camera, OccupancyEvent, HealthLog, Location, Spot, SpotObservation
+from database.models import Base, Camera, OccupancyEvent, HealthLog, Location, Spot, SpotObservation, DeviceStatus
 from control_plane.schemas import (
     CameraCreate, CameraResponse, CameraUpdate, OccupancyUpdate, 
     HealthUpdate, OccupancyEventResponse, CaptureFrameRequest, CaptureFrameResponse,
@@ -94,24 +94,56 @@ def get_location_status(location_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @app.get("/cameras", response_model=List[CameraResponse])
 def list_cameras(db: Session = Depends(get_db)):
-    return db.query(Camera).all()
+    cameras = db.query(Camera).all()
+    for cam in cameras:
+        cam.status = _compute_status(cam)
+    return cameras
 
-@app.get("/events", response_model=List[OccupancyEventResponse])
+@app.get("/events")
 def list_events(camera_id: Optional[uuid.UUID] = None, limit: int = 100, db: Session = Depends(get_db)):
-    query = db.query(OccupancyEvent)
+    """Get recent occupancy events with camera name and location."""
+    query = db.query(
+        OccupancyEvent,
+        Camera.name.label('camera_name'),
+        Location.name.label('location_name')
+    ).join(Camera, OccupancyEvent.camera_id == Camera.id)\
+     .join(Location, Camera.location_id == Location.id)
+    
     if camera_id:
         query = query.filter(OccupancyEvent.camera_id == camera_id)
-    return query.order_by(OccupancyEvent.timestamp.desc()).limit(limit).all()
+    
+    results = query.order_by(OccupancyEvent.timestamp.desc()).limit(limit).all()
+    
+    # Transform results to include camera details
+    return [
+        {
+            "id": row.OccupancyEvent.id,
+            "camera_id": row.OccupancyEvent.camera_id,
+            "camera_name": row.camera_name,
+            "location_name": row.location_name,
+            "timestamp": row.OccupancyEvent.timestamp,
+            "occupied_count": row.OccupancyEvent.occupied_count,
+            "free_count": row.OccupancyEvent.free_count,
+            "total_slots": row.OccupancyEvent.total_slots,
+            "metadata_json": row.OccupancyEvent.metadata_json
+        }
+        for row in results
+    ]
 
 def _sync_spots(db: Session, db_camera: Camera):
     """Ensure all spots defined in camera geometry are registered in the spots table."""
-    if not db_camera.location_id or not db_camera.geometry:
+    if not db_camera.location_id or not db_camera.geometry or not isinstance(db_camera.geometry, list):
         return
     
+    seen_ids = set()
     for zone in db_camera.geometry:
-        spot_id = zone.get("id")
-        if not spot_id:
+        if not isinstance(zone, dict):
             continue
+        spot_id = zone.get("id")
+        if not spot_id or spot_id in seen_ids:
+            continue
+        
+        seen_ids.add(spot_id)
             
         # Check if spot exists
         db_spot = db.query(Spot).filter(Spot.id == spot_id).first()
@@ -134,15 +166,11 @@ def create_camera(camera_in: CameraCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_camera)
     
+    # Compute status for immediate response
+    db_camera.status = _compute_status(db_camera)
+    
     _sync_spots(db, db_camera)
     
-    return db_camera
-
-@app.get("/cameras/{camera_id}", response_model=CameraResponse)
-def get_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
-    if not db_camera:
-        raise HTTPException(status_code=404, detail="Camera not found")
     return db_camera
 
 @app.post("/cameras/{camera_id}/heartbeat")
@@ -151,15 +179,46 @@ def camera_heartbeat(camera_id: uuid.UUID, update: HealthUpdate, db: Session = D
     if not db_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # Update camera status
-    db_camera.status = update.status
+    # Update heartbeat time
     db_camera.last_heartbeat = datetime.now(timezone.utc)
+    
+    # Logic: If worker reports error, save as error.
+    # If worker reports healthy/degraded, use that.
+    # If connection is fresh, it's healthy.
+    db_camera.status = update.status
     
     # Log health event
     log = HealthLog(camera_id=camera_id, status=update.status, message=update.message)
     db.add(log)
     db.commit()
     return {"status": "ok"}
+
+def _compute_status(camera: Camera) -> DeviceStatus:
+    """Determine status based on heartbeat recency."""
+    if not camera.last_heartbeat:
+        return DeviceStatus.DISCONNECTED
+        
+    delta = (datetime.now(timezone.utc) - camera.last_heartbeat).total_seconds()
+    
+    if delta > 120: # 2 minutes without heartbeat
+        return DeviceStatus.DISCONNECTED
+    elif delta > 30: # 30s without heartbeat
+        return DeviceStatus.DEGRADED
+        
+    return camera.status # Return reported status (usually HEALTHY)
+
+@app.get("/cameras/{camera_id}", response_model=CameraResponse)
+def get_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+        
+    # Dynamically update status for response (read-only)
+    # Note: We don't commit this to DB on read to avoid locking, 
+    # but the frontend will see the computed status.
+    db_camera.status = _compute_status(db_camera)
+    
+    return db_camera
 
 @app.post("/cameras/{camera_id}/event")
 def camera_event(camera_id: uuid.UUID, update: OccupancyUpdate, db: Session = Depends(get_db)):
@@ -182,16 +241,23 @@ def camera_event(camera_id: uuid.UUID, update: OccupancyUpdate, db: Session = De
     db.add(event)
     
     # NEW: Populate spot_observations
-    if update.metadata_json and "spot_details" in update.metadata_json:
+    # We only do this if the camera is linked to a location (referential integrity for Spots)
+    if db_camera.location_id and update.metadata_json and "spot_details" in update.metadata_json:
+        # Fetch existing spot IDs for this location to avoid FK violations.
+        # In a production environment, this could be optimized with a cache.
+        valid_spot_ids = {s[0] for s in db.query(Spot.id).filter(Spot.location_id == db_camera.location_id).all()}
+        
         for spot in update.metadata_json["spot_details"]:
-            obs = SpotObservation(
-                spot_id=spot["spot_id"],
-                camera_id=camera_id,
-                occupied=1 if spot["occupied"] else 0, # Storing as int for potential aggregation
-                timestamp=update.timestamp
-            )
-            db.add(obs)
-
+            s_id = spot["spot_id"]
+            if s_id in valid_spot_ids:
+                obs = SpotObservation(
+                    spot_id=s_id,
+                    camera_id=camera_id,
+                    occupied=bool(spot["occupied"]),
+                    timestamp=update.timestamp
+                )
+                db.add(obs)
+    
     db.commit()
     return {"received": True}
 
@@ -313,6 +379,8 @@ def get_camera_snapshot(camera_id: uuid.UUID, annotate: bool = True, db: Session
             width=width,
             height=height
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Snapshot error: {str(e)}")
 

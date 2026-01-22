@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libgl1 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY control_plane/requirements.txt ./control_plane/

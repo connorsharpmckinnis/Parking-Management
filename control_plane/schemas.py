@@ -27,12 +27,13 @@ class SpotResponse(SpotBase):
 
 class CameraBase(BaseModel):
     name: str
-    location_id: Optional[UUID] = None
+    location_id: UUID
     connection_type: ConnectionType = ConnectionType.FIBER
     stream_url: str
     model_version: str = "yolo11n"
     processing_interval_sec: int = 5
     geometry: Optional[Any] = None
+    detection_classes: List[int] = [2, 3, 5, 7]  # COCO classes
     desired_state: DesiredState = DesiredState.STOPPED
 
 class CameraCreate(CameraBase):

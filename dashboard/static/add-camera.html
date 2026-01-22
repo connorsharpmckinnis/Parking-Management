@@ -103,8 +103,8 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="camera-location-id">Location</label>
-                    <select class="form-select" id="camera-location-id">
-                        <option value="">-- No Location Linked --</option>
+                    <select class="form-select" id="camera-location-id" required>
+                        <option value="">-- Select Site Location --</option>
                     </select>
                 </div>
             </div>
@@ -132,6 +132,23 @@
                         <option value="edge">Edge</option>
                     </select>
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Detection Objects (COCO)</label>
+                <div class="checkbox-group" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" name="detection-class" value="[2,3,5,7]" checked> Vehicles (Car, Bus,
+                        Truck, Bike)
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" name="detection-class" value="[0]"> People
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" name="detection-class" value="[1]"> Bicycles
+                    </label>
+                </div>
+                <small class="text-muted">Select all that apply. If none selected, defaults to Vehicles.</small>
             </div>
 
             <div class="form-group">
@@ -419,6 +436,11 @@
 
         // Register camera
         async function registerCamera() {
+            if (!document.getElementById('camera-location-id').value) {
+                showToast('Please select a location for this camera', 'error');
+                return;
+            }
+
             if (completedZones.length === 0) {
                 showToast('Please define at least one parking zone', 'error');
                 return;
@@ -435,13 +457,24 @@
                 ])
             }));
 
+            // Collect selected detection classes
+            let detectionClasses = [];
+            document.querySelectorAll('input[name="detection-class"]:checked').forEach(cb => {
+                const vals = JSON.parse(cb.value);
+                detectionClasses = [...detectionClasses, ...vals];
+            });
+            // Unique and sort
+            detectionClasses = [...new Set(detectionClasses)].sort((a, b) => a - b);
+            if (detectionClasses.length === 0) detectionClasses = [2, 3, 5, 7]; // Default
+
             const payload = {
                 name: document.getElementById('camera-name').value,
                 location_id: document.getElementById('camera-location-id').value || null,
                 stream_url: getStreamUrl(),
                 connection_type: document.getElementById('connection-type').value,
                 desired_state: 'running',
-                geometry: scaledZones
+                geometry: scaledZones,
+                detection_classes: detectionClasses
             };
 
             try {

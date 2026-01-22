@@ -683,8 +683,8 @@ a:hover {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     width: 100%;
-    max-width: 600px;
-    max-height: 80vh;
+    max-width: 80%;
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
 }
@@ -700,6 +700,7 @@ a:hover {
 .modal-body {
     padding: var(--spacing-lg);
     overflow-y: auto;
+    flex: 1;
 }
 
 .btn-close {

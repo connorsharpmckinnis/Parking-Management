@@ -41,11 +41,11 @@
             </div>
             <div class="card metric-card">
                 <div class="metric-value" id="metric-active">-</div>
-                <div class="metric-label">Active Streams</div>
+                <div class="metric-label">Running Cameras</div>
             </div>
             <div class="card metric-card">
-                <div class="metric-value" id="metric-status">-</div>
-                <div class="metric-label">System Status</div>
+                <div class="metric-value" id="metric-spaces">-</div>
+                <div class="metric-label">Total Monitored Spaces</div>
             </div>
         </div>
 
@@ -112,12 +112,19 @@
 
         function renderMetrics(cameras) {
             const total = cameras.length;
-            const active = cameras.filter(c => c.status === 'healthy').length;
+            const running = cameras.filter(c => c.desired_state === 'running').length;
+
+            // Calculate total spaces from geometry
+            let totalSpaces = 0;
+            cameras.forEach(c => {
+                if (c.geometry && Array.isArray(c.geometry)) {
+                    totalSpaces += c.geometry.length;
+                }
+            });
 
             document.getElementById('metric-total').textContent = total;
-            document.getElementById('metric-active').textContent = active;
-            document.getElementById('metric-status').textContent = total > 0 ? 'Online' : 'Offline';
-            document.getElementById('metric-status').style.color = total > 0 ? 'var(--color-primary)' : 'var(--color-danger)';
+            document.getElementById('metric-active').textContent = running;
+            document.getElementById('metric-spaces').textContent = totalSpaces;
         }
 
         function renderCameraGrid(cameras) {

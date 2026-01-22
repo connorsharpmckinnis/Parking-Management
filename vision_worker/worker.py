@@ -7,6 +7,7 @@ import threading
 from datetime import datetime, timezone
 from ultralytics import YOLO
 import numpy as np
+import base64
 
 class VisionWorker:
     def __init__(self):
@@ -15,12 +16,18 @@ class VisionWorker:
         self.stream_url = os.getenv("STREAM_URL")
         self.api_endpoint = os.getenv("API_ENDPOINT") # http://control-plane:8000
         self.interval = float(os.getenv("POLL_INTERVAL", "5.0"))
-        self.model_path = os.getenv("MODEL_PATH", "yolo11n.pt")
+        self.model_path = os.getenv("MODEL_PATH", "yolo26x.pt")
         
         # Geometry parsing
         zone_json = os.getenv("ZONE_CONFIG", "[]")
         self.polygons = self._parse_zones(zone_json)
         self.total_slots = len(self.polygons)
+        
+        # Class filtering
+        try:
+            self.classes = json.loads(os.getenv("DETECTION_CLASSES", "[2, 3, 5, 7]"))
+        except:
+            self.classes = [2, 3, 5, 7]
         
         self.running = False
         self.latest_frame = None
@@ -82,7 +89,7 @@ class VisionWorker:
 
     def _analyze_and_report(self, model, frame):
         # Run inference
-        results = model.predict(frame, classes=[2, 3, 5, 7], verbose=False)
+        results = model.predict(frame, classes=self.classes, verbose=False)
         occupied_count = 0
         spot_results = []
         
@@ -106,6 +113,21 @@ class VisionWorker:
                 
                 if is_occupied:
                     occupied_count += 1
+            
+            # Generate annotated image
+            annotated_frame = results[0].plot()
+            
+            # Draw spot zones
+            for zone, res in zip(self.polygons, spot_results):
+                poly = zone["poly"]
+                # Red if occupied, Green if free
+                color = (0, 0, 255) if res["occupied"] else (0, 255, 0)
+                cv2.polylines(annotated_frame, [poly], True, color, 2)
+
+            _, buffer = cv2.imencode('.jpg', annotated_frame)
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+        else:
+            jpg_as_text = None
 
         # POST Telemetry
         payload = {
@@ -114,7 +136,8 @@ class VisionWorker:
             "free_count": self.total_slots - occupied_count,
             "total_slots": self.total_slots,
             "metadata_json": {
-                "spot_details": spot_results
+                "spot_details": spot_results,
+                "snapshot": jpg_as_text
             }
         }
         

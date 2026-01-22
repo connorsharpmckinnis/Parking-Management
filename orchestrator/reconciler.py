@@ -81,6 +81,7 @@ def start_worker(camera):
         "-e", f"API_ENDPOINT={CONTROL_PLANE_URL}",
         "-e", f"POLL_INTERVAL={camera['processing_interval_sec']}",
         "-e", f"ZONE_CONFIG={json.dumps(camera['geometry'])}",
+        "-e", f"DETECTION_CLASSES={json.dumps(camera.get('detection_classes', [2, 3, 5, 7]))}",
         WORKER_IMAGE
     ]
     subprocess.run(cmd)

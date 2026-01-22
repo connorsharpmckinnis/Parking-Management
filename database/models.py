@@ -37,7 +37,7 @@ class Camera(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
-    location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=True)
+    location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False)
     
     # Connection details
     connection_type = Column(Enum(ConnectionType), default=ConnectionType.FIBER)
@@ -47,6 +47,7 @@ class Camera(Base):
     model_version = Column(String, default="yolo11n")
     processing_interval_sec = Column(Integer, default=5)
     geometry = Column(JSON, nullable=True) # Polygon zones
+    detection_classes = Column(JSON, default=[2, 3, 5, 7]) # COCO classes: car, motorcycle, bus, truck
     
     # State
     desired_state = Column(Enum(DesiredState), default=DesiredState.STOPPED)

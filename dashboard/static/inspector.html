@@ -94,6 +94,22 @@
         </div>
     </main>
 
+    <!-- Snapshot Modal -->
+    <div id="modal-snapshot-view" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-snap-title">Camera Snapshot</h3>
+                <button class="btn-close" onclick="closeSnapshotModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="camera-snapshot-container">
+                    <img src="" class="camera-snapshot-img" id="modal-snap-img" alt="Live View">
+                    <div class="snapshot-overlay">Loading Snapshot...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal for Spot Details -->
     <div id="modal-details" class="modal">
         <div class="modal-content">
@@ -153,7 +169,7 @@
                 renderCamerasTable(cameras);
             } catch (error) {
                 document.getElementById('cameras-tbody').innerHTML =
-                    `<tr><td colspan="7" class="text-center text-danger">Failed to load cameras</td></tr>`;
+                    `<tr><td colspan="8" class="text-center text-danger">Failed to load cameras</td></tr>`;
             }
         }
 
@@ -169,9 +185,25 @@
 
         function renderCamerasTable(cameras) {
             const tbody = document.getElementById('cameras-tbody');
+            const thead = document.getElementById('cameras-table').querySelector('thead tr');
+
+            // Ensure header has Actions column
+            if (!thead.querySelector('.col-actions')) {
+                const updatedHeader = `
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Location</th>
+                    <th>Connection</th>
+                    <th>Status</th>
+                    <th>Desired State</th>
+                    <th>Last Event</th>
+                    <th class="col-actions">Actions</th>
+                `;
+                thead.innerHTML = updatedHeader;
+            }
 
             if (cameras.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No cameras registered</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No cameras registered</td></tr>`;
                 return;
             }
 
@@ -184,33 +216,76 @@
                     <td class="${cam.status === 'healthy' ? 'text-success' : 'text-danger'}">${cam.status || 'unknown'}</td>
                     <td>${cam.desired_state || 'stopped'}</td>
                     <td>${formatTimestamp(cam.last_event_time)}</td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="viewSnapshot('${cam.id}', '${escapeHtml(cam.name)}')">
+                                Snapshot
+                            </button>
+                            ${cam.desired_state === 'running'
+                    ? `<button class="btn btn-warning btn-sm" onclick="toggleCamera('${cam.id}', 'stopped')">Stop</button>`
+                    : `<button class="btn btn-primary btn-sm" onclick="toggleCamera('${cam.id}', 'running')">Start</button>`
+                }
+                        </div>
+                    </td>
                 </tr>
             `).join('');
         }
 
+        async function toggleCamera(cameraId, newState) {
+            try {
+                await updateCamera(cameraId, { desired_state: newState });
+                showToast(`Camera ${newState === 'running' ? 'started' : 'stopped'}`, 'success');
+                loadCameras();
+            } catch (error) {
+                showToast(`Failed to update camera: ${error.message}`, 'error');
+            }
+        }
+
         function renderEventsTable(events) {
             const tbody = document.getElementById('events-tbody');
+            const thead = document.getElementById('events-table').querySelector('thead tr');
+
+            // Update header to include Location/Name
+            if (!thead.querySelector('.col-cam-name')) {
+                const updatedHeader = `
+                    <th>ID</th>
+                    <th class="col-cam-name">Camera Name</th>
+                    <th>Location</th>
+                    <th>Timestamp</th>
+                    <th>Occupied</th>
+                    <th>Free</th>
+                    <th>Total</th>
+                    <th>Details</th>
+                `;
+                thead.innerHTML = updatedHeader;
+            }
 
             if (events.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No events recorded yet</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No events recorded yet</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = events.map(evt => {
                 const hasDetails = evt.metadata_json && evt.metadata_json.spot_details;
-                const detailsJson = hasDetails ? JSON.stringify(evt.metadata_json.spot_details) : 'null';
+                const detailsJson = hasDetails ? JSON.stringify(evt.metadata_json.spot_details).replace(/"/g, '&quot;') : 'null';
+                const snapshot = (evt.metadata_json && evt.metadata_json.snapshot) ? evt.metadata_json.snapshot : null;
+                // We use a global map or pass it specially because escaping huge base64 strings in HTML attributes is bad.
+                // Better approach: Store in a temporary map by Event ID.
+                window.eventSnapshots = window.eventSnapshots || {};
+                window.eventSnapshots[evt.id] = snapshot;
 
                 return `
                     <tr>
                         <td>${evt.id}</td>
-                        <td><small>${evt.camera_id}</small></td>
+                        <td>${escapeHtml(evt.camera_name || evt.camera_id)}</td>
+                        <td>${escapeHtml(evt.location_name || 'Unknown')}</td>
                         <td>${formatTimestamp(evt.timestamp)}</td>
                         <td>${evt.occupied_count ?? 'N/A'}</td>
                         <td>${evt.free_count ?? 'N/A'}</td>
                         <td>${evt.total_slots ?? 'N/A'}</td>
                         <td>
                             ${hasDetails
-                        ? `<button class="btn btn-primary btn-sm" onclick='showDetails(${detailsJson}, "${evt.camera_id}")'>View Spots</button>`
+                        ? `<button class="btn btn-primary btn-sm" onclick='showDetails(${detailsJson}, "${evt.id}")'>View Analysis</button>`
                         : `<span class="text-muted">No data</span>`
                     }
                         </td>
@@ -219,15 +294,44 @@
             }).join('');
         }
 
-        async function showDetails(spots, cameraId) {
+        async function viewSnapshot(cameraId, cameraName) {
+            const modal = document.getElementById('modal-snapshot-view');
+            const title = document.getElementById('modal-snap-title');
+            const img = document.getElementById('modal-snap-img');
+            const overlay = img.parentElement.querySelector('.snapshot-overlay');
+
+            title.textContent = `Snapshot: ${cameraName}`;
+            modal.style.display = 'block';
+            img.style.display = 'none';
+            overlay.style.display = 'flex';
+            overlay.textContent = "Loading Snapshot...";
+
+            try {
+                const data = await getCameraSnapshot(cameraId);
+                img.src = `data:image/jpeg;base64,${data.image_base64}`;
+                img.style.display = 'block';
+                overlay.style.display = 'none';
+            } catch (error) {
+                overlay.textContent = "Snapshot Unavailable (Stream Offline?)";
+                console.error(error);
+            }
+        }
+
+        function closeSnapshotModal() {
+            document.getElementById('modal-snapshot-view').style.display = 'none';
+        }
+
+        async function showDetails(spots, eventId) {
             const modal = document.getElementById('modal-details');
             const body = document.getElementById('modal-body');
+
+            const snapshotB64 = window.eventSnapshots[eventId];
 
             modal.style.display = 'block';
             body.innerHTML = `
                 <div class="camera-snapshot-container mb-md">
-                    <img src="" class="camera-snapshot-img" id="modal-snapshot" alt="Live View">
-                    <div class="snapshot-overlay">Loading Snapshot...</div>
+                    <img src="${snapshotB64 ? 'data:image/jpeg;base64,' + snapshotB64 : ''}" class="camera-snapshot-img" id="modal-snapshot" alt="Analyzed Event View" style="${snapshotB64 ? '' : 'display:none'}">
+                    <div class="snapshot-overlay" style="${snapshotB64 ? 'display:none' : ''}">Snapshot Unavailable</div>
                 </div>
                 <div class="table-container">
                     <table class="data-table">
@@ -252,19 +356,6 @@
                     </table>
                 </div>
             `;
-
-            // Load live snapshot
-            try {
-                const data = await getCameraSnapshot(cameraId);
-                const img = document.getElementById('modal-snapshot');
-                if (img) {
-                    img.src = `data:image/jpeg;base64,${data.image_base64}`;
-                    img.parentElement.querySelector('.snapshot-overlay').style.display = 'none';
-                }
-            } catch (error) {
-                const overlay = document.querySelector('#modal-snapshot')?.parentElement.querySelector('.snapshot-overlay');
-                if (overlay) overlay.textContent = 'Snapshot Unavailable';
-            }
         }
 
         function closeModal() {
