@@ -34,6 +34,12 @@ class CameraBase(BaseModel):
     processing_interval_sec: int = 5
     geometry: Optional[Any] = None
     detection_classes: List[int] = [2, 3, 5, 7]  # COCO classes
+    
+    # Advanced Vision Config
+    detection_confidence: float = 0.25
+    sahi_enabled: bool = False
+    sahi_tile_size: int = 640
+    sahi_overlap_ratio: float = 0.25
     desired_state: DesiredState = DesiredState.STOPPED
 
 class CameraCreate(CameraBase):
@@ -46,6 +52,11 @@ class CameraUpdate(BaseModel):
     desired_state: Optional[DesiredState] = None
     geometry: Optional[Any] = None
     processing_interval_sec: Optional[int] = None
+    
+    detection_confidence: Optional[float] = None
+    sahi_enabled: Optional[bool] = None
+    sahi_tile_size: Optional[int] = None
+    sahi_overlap_ratio: Optional[float] = None
 
 class CameraResponse(CameraBase):
     model_config = ConfigDict(from_attributes=True)

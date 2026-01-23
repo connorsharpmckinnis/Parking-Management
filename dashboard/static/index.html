@@ -4,238 +4,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Monitor | Parking Management</title>
+    <title>Dashboard | SpotWatch</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="header-brand">
-                <h1>Parking Management</h1>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo-icon">
+                <i data-lucide="camera"></i>
             </div>
-            <nav class="header-nav">
-                <a href="index.html" class="nav-tab">Live Monitor</a>
-                <a href="locations.html" class="nav-tab">Locations</a>
-                <a href="inspector.html" class="nav-tab">Data Inspector</a>
-                <a href="add-camera.html" class="nav-tab">Add Camera</a>
-            </nav>
+            <div class="sidebar-brand">
+                SpotWatch
+                <span>Occupancy Detection</span>
+            </div>
         </div>
-    </header>
+
+        <div class="sidebar-nav">
+            <div class="nav-section-label">Overview</div>
+            <a href="index.html" class="nav-item active">
+                <i data-lucide="layout-dashboard" class="navbar-icon"></i>
+                Dashboard
+            </a>
+
+            <div class="nav-section-label">Management</div>
+            <a href="cameras.html" class="nav-item">
+                <i data-lucide="camera" class="navbar-icon"></i>
+                Cameras
+            </a>
+            <a href="monitor.html" class="nav-item">
+                <i data-lucide="monitor-play" class="navbar-icon"></i>
+                Live Monitor
+            </a>
+
+            <div class="nav-section-label">Analytics</div>
+            <a href="locations.html" class="nav-item">
+                <i data-lucide="map-pin" class="navbar-icon"></i>
+                Locations
+            </a>
+            <a href="inspector.html" class="nav-item">
+                <i data-lucide="database" class="navbar-icon"></i>
+                Database
+            </a>
+        </div>
+
+        <div class="sidebar-footer">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>v0.8.1</span>
+                <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
+            </div>
+        </div>
+    </nav>
 
     <!-- Main Content -->
     <main class="main-content">
-        <h2 class="page-title">Live Camera Monitor</h2>
-        <p class="page-subtitle">Auto-refreshing every 10 seconds</p>
+        <div class="content-scrollable">
+            <div class="page-header">
+                <h1 class="page-title">Dashboard</h1>
+                <p class="page-description">Overview of your camera network and occupancy status</p>
+            </div>
 
-        <!-- Metrics Row -->
-        <div class="metrics-row">
-            <div class="card metric-card">
-                <div class="metric-value" id="metric-total">-</div>
-                <div class="metric-label">Total Cameras</div>
-            </div>
-            <div class="card metric-card">
-                <div class="metric-value" id="metric-active">-</div>
-                <div class="metric-label">Running Cameras</div>
-            </div>
-            <div class="card metric-card">
-                <div class="metric-value" id="metric-spaces">-</div>
-                <div class="metric-label">Total Monitored Spaces</div>
-            </div>
-        </div>
+            <!-- Stats Row -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Total Cameras</span>
+                        <div class="stat-icon"><i data-lucide="camera"></i></div>
+                    </div>
+                    <div class="stat-value" id="stat-total-cameras">-</div>
+                    <div class="stat-desc"><span id="stat-active-cameras">-</span> active</div>
+                </div>
 
-        <!-- Camera Grid -->
-        <div class="camera-grid" id="camera-grid">
-            <div class="card text-center text-muted" style="grid-column: 1 / -1; padding: 3rem;">
-                <div class="spinner" style="margin: 0 auto 1rem;"></div>
-                Loading cameras...
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Locations</span>
+                        <div class="stat-icon"><i data-lucide="map-pin"></i></div>
+                    </div>
+                    <div class="stat-value" id="stat-locations">-</div>
+                    <div class="stat-desc">Monitored areas</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Occupancy Rate</span>
+                        <div class="stat-icon"><i data-lucide="eye"></i></div>
+                    </div>
+                    <div class="stat-value" id="stat-occupancy">0%</div>
+                    <div class="stat-desc"><span id="stat-occupied-spots">0</span> of <span
+                            id="stat-total-spots">0</span> spots</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Recent Events</span>
+                        <div class="stat-icon"><i data-lucide="activity"></i></div>
+                    </div>
+                    <div class="stat-value" id="stat-events">-</div>
+                    <div class="stat-desc">Last 24 hours</div>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Quick Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Quick Actions</h3>
+                    </div>
+                    <div class="card-content quick-actions">
+                        <a href="add-camera.html" class="action-btn">
+                            <div class="action-icon"><i data-lucide="plus-circle"></i></div>
+                            <div>
+                                <div style="font-weight: 500;">Add New Camera</div>
+                                <div style="font-size: 0.75rem; color: var(--muted-foreground);">Configure a new camera
+                                    feed</div>
+                            </div>
+                            <i data-lucide="arrow-right" style="margin-left: auto; width: 16px;"></i>
+                        </a>
+                        <a href="monitor.html" class="action-btn">
+                            <div class="action-icon"><i data-lucide="tv"></i></div>
+                            <div>
+                                <div style="font-weight: 500;">View Live Feeds</div>
+                                <div style="font-size: 0.75rem; color: var(--muted-foreground);">Monitor all active
+                                    cameras</div>
+                            </div>
+                            <i data-lucide="arrow-right" style="margin-left: auto; width: 16px;"></i>
+                        </a>
+                        <a href="locations.html" class="action-btn">
+                            <div class="action-icon"><i data-lucide="bar-chart-2"></i></div>
+                            <div>
+                                <div style="font-weight: 500;">Location Analytics</div>
+                                <div style="font-size: 0.75rem; color: var(--muted-foreground);">Check occupancy by
+                                    location</div>
+                            </div>
+                            <i data-lucide="arrow-right" style="margin-left: auto; width: 16px;"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Placeholder -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Recent Activity</h3>
+                    </div>
+                    <div class="card-content"
+                        style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; color: var(--muted-foreground); text-align: center;">
+                        <div style="margin-bottom: 1rem;"><i data-lucide="clock"
+                                style="width: 48px; height: 48px; opacity: 0.2;"></i></div>
+                        <p>No recent observations yet</p>
+                        <p style="font-size: 0.875rem;">Observations will appear here as cameras detect occupancy
+                            changes</p>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-info">
-                Managed by the <strong>Town of Apex's IT Innovations</strong> division
-            </div>
-            <div class="footer-actions">
-                <span class="footer-version" id="app-version">v0.0.0</span>
-                <a href="mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard"
-                    class="btn-bug-report">
-                    Report Bug
-                </a>
-            </div>
-        </div>
-    </footer>
-
-    <div id="toast-container" class="toast-container"></div>
-
     <script src="/static/js/shared.js"></script>
     <script>
-        // ============================================
-        // Live Monitor Page Logic
-        // ============================================
+        lucide.createIcons();
 
-        let locationsMap = {};
-        let lastSnapshots = {}; // Cache for images
-
-        async function loadCameras() {
+        // Simple Dashboard Logic
+        async function loadDashboard() {
             try {
-                const [cameras, locations] = await Promise.all([
-                    getCameras(),
-                    getLocations()
-                ]);
+                // Fetch stats from backend
+                const stats = await getStats();
 
-                // Build locations map
-                locationsMap = {};
-                locations.forEach(loc => {
-                    locationsMap[loc.id] = loc.name;
-                });
+                document.getElementById('stat-total-cameras').textContent = stats.total_cameras;
+                document.getElementById('stat-active-cameras').textContent = stats.active_cameras;
+                document.getElementById('stat-locations').textContent = stats.total_locations;
+                document.getElementById('stat-occupancy').textContent = stats.total_spots > 0
+                    ? Math.round((stats.occupied_spots / stats.total_spots) * 100) + '%'
+                    : '0%';
+                document.getElementById('stat-occupied-spots').textContent = stats.occupied_spots;
+                document.getElementById('stat-total-spots').textContent = stats.total_spots;
+                document.getElementById('stat-events').textContent = stats.recent_events_24h;
 
-                renderMetrics(cameras);
-                renderCameraGrid(cameras);
-            } catch (error) {
-                showToast('Failed to load cameras', 'error');
-                document.getElementById('camera-grid').innerHTML = `
-                    <div class="card text-center text-danger" style="grid-column: 1 / -1; padding: 2rem;">
-                        Failed to connect to Control Plane. Is the service running?
-                    </div>
-                `;
+            } catch (e) {
+                console.error("Dashboard load failed", e);
             }
         }
 
-        function renderMetrics(cameras) {
-            const total = cameras.length;
-            const running = cameras.filter(c => c.desired_state === 'running').length;
-
-            // Calculate total spaces from geometry
-            let totalSpaces = 0;
-            cameras.forEach(c => {
-                if (c.geometry && Array.isArray(c.geometry)) {
-                    totalSpaces += c.geometry.length;
-                }
-            });
-
-            document.getElementById('metric-total').textContent = total;
-            document.getElementById('metric-active').textContent = running;
-            document.getElementById('metric-spaces').textContent = totalSpaces;
-        }
-
-        function renderCameraGrid(cameras) {
-            const grid = document.getElementById('camera-grid');
-
-            if (cameras.length === 0) {
-                grid.innerHTML = `
-                    <div class="card text-center text-muted" style="grid-column: 1 / -1; padding: 2rem;">
-                        No cameras registered yet. <a href="add-camera.html">Add one now</a>.
-                    </div>
-                `;
-                return;
-            }
-
-            grid.innerHTML = cameras.map(cam => {
-                const isHealthy = cam.status === 'healthy';
-                const isRunning = cam.desired_state === 'running';
-                const existingSnap = lastSnapshots[cam.id];
-
-                return `
-                    <div class="card camera-card" data-camera-id="${cam.id}">
-                        <div class="card-header">
-                            <span class="card-title">
-                                <span class="status-indicator ${isHealthy ? 'healthy' : 'unhealthy'}"></span>
-                                ${escapeHtml(cam.name)}
-                            </span>
-                        </div>
-                        <div class="camera-snapshot-container" id="snap-container-${cam.id}">
-                            <img src="${existingSnap ? 'data:image/jpeg;base64,' + existingSnap : ''}" 
-                                 class="camera-snapshot-img" id="snap-${cam.id}" alt="Live Preview"
-                                 style="${existingSnap ? '' : 'display:none'}">
-                            <div class="snapshot-overlay" style="${existingSnap ? 'display:none' : ''}">Loading Snapshot...</div>
-                        </div>
-                        <div class="card-body camera-info">
-                            <div class="camera-info-row">
-                                <span class="camera-info-label">ID</span>
-                                <span class="camera-info-value">${cam.id}</span>
-                            </div>
-                            <div class="camera-info-row">
-                                <span class="camera-info-label">Location</span>
-                                <span class="camera-info-value">${escapeHtml(locationsMap[cam.location_id] || 'N/A')}</span>
-                            </div>
-                            <div class="camera-info-row">
-                                <span class="camera-info-label">State</span>
-                                <span class="camera-info-value ${isRunning ? 'text-success' : 'text-muted'}">${isRunning ? 'Running' : 'Stopped'}</span>
-                            </div>
-                            <div class="camera-info-row">
-                                <span class="camera-info-label">Last Update</span>
-                                <span class="camera-info-value">${formatTimestamp(cam.last_event_time)}</span>
-                            </div>
-                        </div>
-                        <div class="card-footer">
-                            ${isRunning
-                        ? `<button class="btn btn-secondary btn-sm" onclick="toggleCamera('${cam.id}', 'stopped')">Stop</button>`
-                        : `<button class="btn btn-primary btn-sm" onclick="toggleCamera('${cam.id}', 'running')">Start</button>`
-                    }
-                            <button class="btn btn-danger btn-sm" onclick="confirmDelete('${cam.id}', '${escapeHtml(cam.name)}')">Delete</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        async function toggleCamera(cameraId, newState) {
-            try {
-                await updateCamera(cameraId, { desired_state: newState });
-                showToast(`Camera ${newState === 'running' ? 'started' : 'stopped'}`, 'success');
-                loadCameras();
-            } catch (error) {
-                showToast(`Failed to update camera: ${error.message}`, 'error');
-            }
-        }
-
-        async function confirmDelete(cameraId, name) {
-            if (confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
-                try {
-                    await deleteCamera(cameraId);
-                    showToast('Camera deleted', 'success');
-                    loadCameras();
-                } catch (error) {
-                    showToast(`Failed to delete: ${error.message}`, 'error');
-                }
-            }
-        }
-
-        async function updateSnapshots() {
-            const snapImages = document.querySelectorAll('.camera-snapshot-img');
-            for (const img of snapImages) {
-                const cameraId = img.id.replace('snap-', '');
-                try {
-                    const data = await getCameraSnapshot(cameraId);
-                    lastSnapshots[cameraId] = data.image_base64;
-                    img.src = `data:image/jpeg;base64,${data.image_base64}`;
-                    img.style.display = 'block';
-                    img.parentElement.querySelector('.snapshot-overlay').style.display = 'none';
-                } catch (error) {
-                    console.warn(`Failed to update snapshot for ${cameraId}`);
-                    img.parentElement.querySelector('.snapshot-overlay').textContent = 'Stream Offline';
-                }
-            }
-        }
-
-        // Start auto-refresh
-        const refresh = new AutoRefresh(loadCameras, 10000);
-        refresh.start();
-
-        // Separate refresh for snapshots (every 60s as requested)
-        setInterval(updateSnapshots, 60000);
-
-        // Initial snapshot load (slight delay to let grid render)
-        setTimeout(updateSnapshots, 1000);
+        loadDashboard();
     </script>
 </body>
 

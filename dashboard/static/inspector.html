@@ -4,370 +4,252 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Data Inspector | Parking Management</title>
+    <title>Database | SpotWatch</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="header-brand">
-                <h1>Parking Management</h1>
-            </div>
-            <nav class="header-nav">
-                <a href="index.html" class="nav-tab">Live Monitor</a>
-                <a href="locations.html" class="nav-tab">Locations</a>
-                <a href="inspector.html" class="nav-tab">Data Inspector</a>
-                <a href="add-camera.html" class="nav-tab">Add Camera</a>
-            </nav>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo-icon"><i data-lucide="camera"></i></div>
+            <div class="sidebar-brand">SpotWatch<span>Occupancy Detection</span></div>
         </div>
-    </header>
+        <div class="sidebar-nav">
+            <div class="nav-section-label">Overview</div>
+            <a href="index.html" class="nav-item"><i data-lucide="layout-dashboard"
+                    class="navbar-icon"></i>Dashboard</a>
+
+            <div class="nav-section-label">Management</div>
+            <a href="cameras.html" class="nav-item"><i data-lucide="camera" class="navbar-icon"></i>Cameras</a>
+            <a href="monitor.html" class="nav-item"><i data-lucide="monitor-play" class="navbar-icon"></i>Live
+                Monitor</a>
+
+            <div class="nav-section-label">Analytics</div>
+            <a href="locations.html" class="nav-item"><i data-lucide="map-pin" class="navbar-icon"></i>Locations</a>
+            <a href="inspector.html" class="nav-item active"><i data-lucide="database"
+                    class="navbar-icon"></i>Database</a>
+        </div>
+        <div class="sidebar-footer">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>v0.8.1</span>
+                <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
+            </div>
+            <!-- Footer Content (previously outside sidebar) -->
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
+                Town of Apex IT Innovations
+            </div>
+        </div>
+    </nav>
 
     <!-- Main Content -->
     <main class="main-content">
-        <h2 class="page-title">Data Inspector</h2>
-        <p class="page-subtitle">Auto-refreshing every 10 seconds</p>
-
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="tab-cameras">Cameras</button>
-            <button class="tab-btn" data-tab="tab-events">Occupancy Events</button>
-        </div>
-
-        <!-- Tab: Cameras -->
-        <div id="tab-cameras" class="tab-content active">
-            <div class="card">
-                <h3 class="card-title mb-md">Registered Cameras</h3>
-                <div class="table-container">
-                    <table class="data-table" id="cameras-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Location</th>
-                                <th>Connection</th>
-                                <th>Status</th>
-                                <th>Desired State</th>
-                                <th>Last Event</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cameras-tbody">
-                            <tr>
-                                <td colspan="7" class="text-center text-muted">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+        <div class="content-scrollable">
+            <div class="page-header">
+                <h1 class="page-title">Database</h1>
+                <p class="page-description">Browse raw data from cameras, locations, and observations</p>
             </div>
-        </div>
 
-        <!-- Tab: Occupancy Events -->
-        <div id="tab-events" class="tab-content">
+            <!-- Tabs -->
             <div class="card">
-                <h3 class="card-title mb-md">Recent Occupancy Events</h3>
-                <div class="table-container">
-                    <table class="data-table" id="events-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Camera ID</th>
-                                <th>Timestamp</th>
-                                <th>Occupied</th>
-                                <th>Free</th>
-                                <th>Total</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody id="events-tbody">
-                            <tr>
-                                <td colspan="7" class="text-center text-muted">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="card-header" style="border-bottom: 1px solid var(--border);">
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn btn-outline active" id="btn-cameras" onclick="switchTab('cameras')">
+                            <i data-lucide="camera" style="width:16px; margin-right: 0.5rem;"></i> Cameras
+                        </button>
+                        <button class="btn btn-outline" id="btn-events" onclick="switchTab('events')">
+                            <i data-lucide="activity" style="width:16px; margin-right: 0.5rem;"></i> Occupancy Events
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-content" style="padding: 0;">
+                    <!-- Cameras Table -->
+                    <div id="tab-cameras">
+                        <div style="padding: 1rem; border-bottom: 1px solid var(--border);">
+                            <span class="text-muted" style="font-size: 0.875rem;">Showing registered devices</span>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Location</th>
+                                        <th>Status</th>
+                                        <th>URL</th>
+                                        <th>Last Update</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cameras-tbody">
+                                    <tr>
+                                        <td colspan="6" style="padding: 1rem; color: var(--muted-foreground);">
+                                            Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Events Table -->
+                    <div id="tab-events" style="display: none;">
+                        <div style="padding: 1rem; border-bottom: 1px solid var(--border);">
+                            <span class="text-muted" style="font-size: 0.875rem;">Recent detection events (Last
+                                100)</span>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Camera</th>
+                                        <th>Location</th>
+                                        <th>Timestamp</th>
+                                        <th>Occupied/Total</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="events-tbody">
+                                    <tr>
+                                        <td colspan="6" style="padding: 1rem; color: var(--muted-foreground);">
+                                            Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Snapshot Modal -->
-    <div id="modal-snapshot-view" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-snap-title">Camera Snapshot</h3>
-                <button class="btn-close" onclick="closeSnapshotModal()">&times;</button>
+    <!-- Event Detail Modal -->
+    <div id="modal-details"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+        <div class="card"
+            style="width: 80%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-title">Event Analysis</span>
+                <button onclick="document.getElementById('modal-details').style.display='none'"
+                    style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
             </div>
-            <div class="modal-body">
-                <div class="camera-snapshot-container">
-                    <img src="" class="camera-snapshot-img" id="modal-snap-img" alt="Live View">
-                    <div class="snapshot-overlay">Loading Snapshot...</div>
-                </div>
-            </div>
+            <div class="card-content" style="overflow-y: auto; padding: 1rem;" id="modal-body"></div>
         </div>
     </div>
-
-    <!-- Modal for Spot Details -->
-    <div id="modal-details" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Spot Occupancy Details</h3>
-                <button class="btn-close" onclick="closeModal()">&times;</button>
-            </div>
-            <div id="modal-body" class="modal-body">
-                <!-- Details will be injected here -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-info">
-                Managed by the <strong>Town of Apex's IT Innovations</strong> division
-            </div>
-            <div class="footer-actions">
-                <span class="footer-version" id="app-version">v0.0.0</span>
-                <a href="mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard"
-                    class="btn-bug-report">
-                    Report Bug
-                </a>
-            </div>
-        </div>
-    </footer>
-
-    <div id="toast-container" class="toast-container"></div>
 
     <script src="/static/js/shared.js"></script>
     <script>
-        // ============================================
-        // Data Inspector Page Logic
-        // ============================================
-
-        async function loadData() {
-            await Promise.all([loadCameras(), loadEvents()]);
-        }
-
+        lucide.createIcons();
         let locationsMap = {};
 
-        async function loadCameras() {
+        async function loadData() {
             try {
-                const [cameras, locations] = await Promise.all([
-                    getCameras(),
-                    getLocations()
-                ]);
+                const [cameras, locations] = await Promise.all([getCameras(), getLocations()]);
+                locations.forEach(loc => locationsMap[loc.id] = loc.name);
+                renderCameras(cameras);
+            } catch (e) { console.error(e); }
 
-                // Build locations map
-                locationsMap = {};
-                locations.forEach(loc => {
-                    locationsMap[loc.id] = loc.name;
-                });
-
-                renderCamerasTable(cameras);
-            } catch (error) {
-                document.getElementById('cameras-tbody').innerHTML =
-                    `<tr><td colspan="8" class="text-center text-danger">Failed to load cameras</td></tr>`;
-            }
-        }
-
-        async function loadEvents() {
             try {
                 const events = await getEvents(100);
-                renderEventsTable(events);
-            } catch (error) {
-                document.getElementById('events-tbody').innerHTML =
-                    `<tr><td colspan="7" class="text-center text-danger">Failed to load events</td></tr>`;
-            }
+                renderEvents(events);
+            } catch (e) { console.error(e); }
         }
 
-        function renderCamerasTable(cameras) {
+        function renderCameras(cameras) {
             const tbody = document.getElementById('cameras-tbody');
-            const thead = document.getElementById('cameras-table').querySelector('thead tr');
-
-            // Ensure header has Actions column
-            if (!thead.querySelector('.col-actions')) {
-                const updatedHeader = `
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Location</th>
-                    <th>Connection</th>
-                    <th>Status</th>
-                    <th>Desired State</th>
-                    <th>Last Event</th>
-                    <th class="col-actions">Actions</th>
-                `;
-                thead.innerHTML = updatedHeader;
-            }
-
             if (cameras.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No cameras registered</td></tr>`;
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:1rem;">No cameras</td></tr>';
                 return;
             }
-
             tbody.innerHTML = cameras.map(cam => `
                 <tr>
-                    <td><small>${cam.id}</small></td>
+                    <td><code>${cam.id.substring(0, 8)}...</code></td>
                     <td>${escapeHtml(cam.name)}</td>
                     <td>${escapeHtml(locationsMap[cam.location_id] || 'N/A')}</td>
-                    <td><code>${cam.connection_type}</code></td>
-                    <td class="${cam.status === 'healthy' ? 'text-success' : 'text-danger'}">${cam.status || 'unknown'}</td>
-                    <td>${cam.desired_state || 'stopped'}</td>
+                    <td><span class="${cam.status === 'healthy' ? 'text-success' : 'text-muted'}">${cam.status}</span></td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground);">${escapeHtml(cam.stream_url)}</td>
                     <td>${formatTimestamp(cam.last_event_time)}</td>
-                    <td>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button class="btn btn-secondary btn-sm" onclick="viewSnapshot('${cam.id}', '${escapeHtml(cam.name)}')">
-                                Snapshot
-                            </button>
-                            ${cam.desired_state === 'running'
-                    ? `<button class="btn btn-warning btn-sm" onclick="toggleCamera('${cam.id}', 'stopped')">Stop</button>`
-                    : `<button class="btn btn-primary btn-sm" onclick="toggleCamera('${cam.id}', 'running')">Start</button>`
-                }
-                        </div>
-                    </td>
                 </tr>
             `).join('');
         }
 
-        async function toggleCamera(cameraId, newState) {
-            try {
-                await updateCamera(cameraId, { desired_state: newState });
-                showToast(`Camera ${newState === 'running' ? 'started' : 'stopped'}`, 'success');
-                loadCameras();
-            } catch (error) {
-                showToast(`Failed to update camera: ${error.message}`, 'error');
-            }
-        }
-
-        function renderEventsTable(events) {
+        function renderEvents(events) {
             const tbody = document.getElementById('events-tbody');
-            const thead = document.getElementById('events-table').querySelector('thead tr');
-
-            // Update header to include Location/Name
-            if (!thead.querySelector('.col-cam-name')) {
-                const updatedHeader = `
-                    <th>ID</th>
-                    <th class="col-cam-name">Camera Name</th>
-                    <th>Location</th>
-                    <th>Timestamp</th>
-                    <th>Occupied</th>
-                    <th>Free</th>
-                    <th>Total</th>
-                    <th>Details</th>
-                `;
-                thead.innerHTML = updatedHeader;
-            }
-
             if (events.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No events recorded yet</td></tr>`;
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:1rem;">No events</td></tr>';
                 return;
             }
-
             tbody.innerHTML = events.map(evt => {
                 const hasDetails = evt.metadata_json && evt.metadata_json.spot_details;
-                const detailsJson = hasDetails ? JSON.stringify(evt.metadata_json.spot_details).replace(/"/g, '&quot;') : 'null';
-                const snapshot = (evt.metadata_json && evt.metadata_json.snapshot) ? evt.metadata_json.snapshot : null;
-                // We use a global map or pass it specially because escaping huge base64 strings in HTML attributes is bad.
-                // Better approach: Store in a temporary map by Event ID.
-                window.eventSnapshots = window.eventSnapshots || {};
-                window.eventSnapshots[evt.id] = snapshot;
+                // Store snap
+                window.eventRaw = window.eventRaw || {};
+                window.eventRaw[evt.id] = evt;
 
                 return `
-                    <tr>
-                        <td>${evt.id}</td>
-                        <td>${escapeHtml(evt.camera_name || evt.camera_id)}</td>
-                        <td>${escapeHtml(evt.location_name || 'Unknown')}</td>
-                        <td>${formatTimestamp(evt.timestamp)}</td>
-                        <td>${evt.occupied_count ?? 'N/A'}</td>
-                        <td>${evt.free_count ?? 'N/A'}</td>
-                        <td>${evt.total_slots ?? 'N/A'}</td>
-                        <td>
-                            ${hasDetails
-                        ? `<button class="btn btn-primary btn-sm" onclick='showDetails(${detailsJson}, "${evt.id}")'>View Analysis</button>`
-                        : `<span class="text-muted">No data</span>`
-                    }
-                        </td>
-                    </tr>
+                <tr>
+                    <td>${evt.id}</td>
+                    <td>${escapeHtml(evt.camera_name)}</td>
+                    <td>${escapeHtml(evt.location_name)}</td>
+                    <td>${formatTimestamp(evt.timestamp)}</td>
+                    <td>
+                        <span style="font-weight: 600;">${evt.occupied_count}</span>
+                        <span class="text-muted"> / ${evt.total_slots}</span>
+                    </td>
+                    <td>
+                        ${hasDetails ? `<button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="showEvent(${evt.id})">View Analysis</button>` : '-'}
+                    </td>
+                </tr>
                 `;
             }).join('');
         }
 
-        async function viewSnapshot(cameraId, cameraName) {
-            const modal = document.getElementById('modal-snapshot-view');
-            const title = document.getElementById('modal-snap-title');
-            const img = document.getElementById('modal-snap-img');
-            const overlay = img.parentElement.querySelector('.snapshot-overlay');
-
-            title.textContent = `Snapshot: ${cameraName}`;
-            modal.style.display = 'block';
-            img.style.display = 'none';
-            overlay.style.display = 'flex';
-            overlay.textContent = "Loading Snapshot...";
-
-            try {
-                const data = await getCameraSnapshot(cameraId);
-                img.src = `data:image/jpeg;base64,${data.image_base64}`;
-                img.style.display = 'block';
-                overlay.style.display = 'none';
-            } catch (error) {
-                overlay.textContent = "Snapshot Unavailable (Stream Offline?)";
-                console.error(error);
-            }
-        }
-
-        function closeSnapshotModal() {
-            document.getElementById('modal-snapshot-view').style.display = 'none';
-        }
-
-        async function showDetails(spots, eventId) {
+        function showEvent(id) {
+            const evt = window.eventRaw[id];
             const modal = document.getElementById('modal-details');
             const body = document.getElementById('modal-body');
+            const snap = evt.metadata_json.snapshot;
+            const spots = evt.metadata_json.spot_details;
 
-            const snapshotB64 = window.eventSnapshots[eventId];
-
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
             body.innerHTML = `
-                <div class="camera-snapshot-container mb-md">
-                    <img src="${snapshotB64 ? 'data:image/jpeg;base64,' + snapshotB64 : ''}" class="camera-snapshot-img" id="modal-snapshot" alt="Analyzed Event View" style="${snapshotB64 ? '' : 'display:none'}">
-                    <div class="snapshot-overlay" style="${snapshotB64 ? 'display:none' : ''}">Snapshot Unavailable</div>
+                <div style="margin-bottom: 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;">
+                    ${snap ? `<img src="data:image/jpeg;base64,${snap}" style="width: 100%; display: block;">` : '<div style="padding: 2rem; text-align: center;">No Snapshot</div>'}
                 </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
+                <table class="data-table">
+                    <thead><tr><th>Spot</th><th>State</th></tr></thead>
+                    <tbody>
+                        ${spots.map(s => `
                             <tr>
-                                <th>Spot ID</th>
-                                <th>Status (at time of event)</th>
+                                <td>${s.spot_id}</td>
+                                <td><span class="badge ${s.occupied ? 'badge-danger' : 'badge-success'}" style="padding: 2px 6px; border-radius: 4px; background: ${s.occupied ? '#fee2e2' : '#dcfce7'}; color: ${s.occupied ? '#991b1b' : '#166534'}">${s.occupied ? 'OCCUPIED' : 'FREE'}</span></td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            ${spots.map(spot => `
-                                <tr>
-                                    <td><code>${escapeHtml(spot.spot_id)}</code></td>
-                                    <td>
-                                        <span class="badge ${spot.occupied ? 'badge-danger' : 'badge-success'}">
-                                            ${spot.occupied ? 'Occupied' : 'Available'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
+                        `).join('')}
+                    </tbody>
+                </table>
             `;
         }
 
-        function closeModal() {
-            document.getElementById('modal-details').style.display = 'none';
+        function switchTab(tab) {
+            document.getElementById('tab-cameras').style.display = tab === 'cameras' ? 'block' : 'none';
+            document.getElementById('tab-events').style.display = tab === 'events' ? 'block' : 'none';
+
+            document.getElementById('btn-cameras').classList.toggle('active', tab === 'cameras');
+            // Manually handling styling for 'active' outline button if needed, but existing css handles .active on some classes.
+            // Let's just swap background
+            if (tab === 'cameras') {
+                document.getElementById('btn-cameras').style.background = 'var(--secondary)';
+                document.getElementById('btn-events').style.background = 'transparent';
+            } else {
+                document.getElementById('btn-cameras').style.background = 'transparent';
+                document.getElementById('btn-events').style.background = 'var(--secondary)';
+            }
         }
 
-        // Initialize tabs and auto-refresh
-        document.addEventListener('DOMContentLoaded', () => {
-            initTabs();
-            const refresh = new AutoRefresh(loadData, 10000);
-            refresh.start();
-        });
+        loadData();
     </script>
 </body>
 

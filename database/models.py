@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Enum, BigInteger, UUID, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Enum, BigInteger, UUID, Boolean, Float
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 import uuid
@@ -48,6 +48,12 @@ class Camera(Base):
     processing_interval_sec = Column(Integer, default=5)
     geometry = Column(JSON, nullable=True) # Polygon zones
     detection_classes = Column(JSON, default=[2, 3, 5, 7]) # COCO classes: car, motorcycle, bus, truck
+
+    # Advanced Vision Config
+    detection_confidence = Column(Float, default=0.25)
+    sahi_enabled = Column(Boolean, default=False)
+    sahi_tile_size = Column(Integer, default=640)
+    sahi_overlap_ratio = Column(Float, default=0.25)
     
     # State
     desired_state = Column(Enum(DesiredState), default=DesiredState.STOPPED)

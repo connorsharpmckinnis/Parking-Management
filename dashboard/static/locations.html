@@ -4,378 +4,267 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Locations | Parking Management</title>
+    <title>Locations | SpotWatch</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="header-brand">
-                <h1>Parking Management</h1>
-            </div>
-            <nav class="header-nav">
-                <a href="index.html" class="nav-tab">Live Monitor</a>
-                <a href="locations.html" class="nav-tab">Locations</a>
-                <a href="inspector.html" class="nav-tab">Data Inspector</a>
-                <a href="add-camera.html" class="nav-tab">Add Camera</a>
-            </nav>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo-icon"><i data-lucide="camera"></i></div>
+            <div class="sidebar-brand">SpotWatch<span>Occupancy Detection</span></div>
         </div>
-    </header>
+        <div class="sidebar-nav">
+            <div class="nav-section-label">Overview</div>
+            <a href="index.html" class="nav-item"><i data-lucide="layout-dashboard"
+                    class="navbar-icon"></i>Dashboard</a>
+
+            <div class="nav-section-label">Management</div>
+            <a href="cameras.html" class="nav-item"><i data-lucide="camera" class="navbar-icon"></i>Cameras</a>
+            <a href="monitor.html" class="nav-item"><i data-lucide="monitor-play" class="navbar-icon"></i>Live
+                Monitor</a>
+
+            <div class="nav-section-label">Analytics</div>
+            <a href="locations.html" class="nav-item active"><i data-lucide="map-pin"
+                    class="navbar-icon"></i>Locations</a>
+            <a href="inspector.html" class="nav-item"><i data-lucide="database" class="navbar-icon"></i>Database</a>
+        </div>
+        <div class="sidebar-footer">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>v0.8.1</span>
+                <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
+            </div>
+            <!-- Footer Content (previously outside sidebar) -->
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
+                Town of Apex IT Innovations
+            </div>
+        </div>
+    </nav>
 
     <!-- Main Content -->
     <main class="main-content">
-        <h2 class="page-title">Parking Locations</h2>
-        <p class="page-subtitle">Manage parking lots and view spot-level availability</p>
-
-        <div class="card" style="margin-bottom: 2rem;">
-            <div class="card-header">
-                <span class="card-title">Add New Location</span>
-            </div>
-            <div class="card-body">
-                <form id="add-location-form" class="horizontal-form" onsubmit="handleAddLocation(event)">
-                    <div class="form-group">
-                        <label for="location-name">Location Name</label>
-                        <input type="text" id="location-name" placeholder="e.g., North Lot" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Create Location</button>
-                </form>
-            </div>
-        </div>
-
-        <div class="grid-2col">
-            <!-- Locations List -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">All Locations</span>
+        <div class="content-scrollable">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2rem;">
+                <div class="page-header" style="margin-bottom: 0;">
+                    <h1 class="page-title">Locations</h1>
+                    <p class="page-description">Manage parking lots and view spot-level availability</p>
                 </div>
-                <div class="card-body" style="padding: 0;">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th width="150">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="locations-tbody">
-                            <tr>
-                                <td colspan="2" class="text-center text-muted">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+
+                <button class="btn btn-primary" onclick="window.location.href='#add-loc'">
+                    <i data-lucide="plus" style="width:16px; margin-right: 0.5rem;"></i> Add Location
+                </button>
             </div>
 
-            <!-- Location Details -->
-            <div id="location-details" class="card" style="display: none;">
-                <div class="card-header">
-                    <span class="card-title" id="details-title">Location Details</span>
-                </div>
-                <div class="card-body">
-                    <div class="metrics-row" style="margin-bottom: 2rem;">
-                        <div class="metric-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                            <div class="metric-value" id="loc-total-spots">-</div>
-                            <div class="metric-label">Total Spots</div>
+            <div class="dashboard-grid">
+                <!-- Left: Locations List -->
+                <div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">All Locations</span>
                         </div>
-                        <div class="metric-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                            <div class="metric-value" id="loc-occupied-spots">-</div>
-                            <div class="metric-label">Occupied</div>
-                        </div>
-                        <div class="metric-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                            <div class="metric-value" id="loc-free-spots">-</div>
-                            <div class="metric-label">Available</div>
+                        <div style="padding: 0;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th width="80"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="locations-tbody">
+                                    <tr>
+                                        <td colspan="2" style="padding: 1rem; color: var(--muted-foreground);">
+                                            Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <h4>Live Camera Views</h4>
-                    <div id="location-snapshots" class="location-snapshots-grid mb-md">
-                        <div class="text-center text-muted">Retrieving camera snapshots...</div>
+                    <div class="card" id="add-loc" style="margin-top: 1.5rem;">
+                        <div class="card-header">
+                            <span class="card-title" style="font-size: 1rem;">Create Location</span>
+                        </div>
+                        <div class="card-content">
+                            <form onsubmit="handleAddLocation(event)" style="display: flex; gap: 0.5rem;">
+                                <input type="text" id="location-name" class="form-input"
+                                    style="border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius-md); flex: 1;"
+                                    placeholder="Location Name" required>
+                                <button type="submit" class="btn btn-primary">Create</button>
+                            </form>
+                        </div>
                     </div>
+                </div>
 
-                    <h4>Spot-Level Status</h4>
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Spot ID</th>
-                                <th>Status</th>
-                                <th>Last Check</th>
-                            </tr>
-                        </thead>
-                        <tbody id="spots-tbody">
-                            <!-- Populated by JS -->
-                        </tbody>
-                    </table>
+                <!-- Right: Details -->
+                <div id="location-details" style="display: none;">
+                    <div class="card">
+                        <div class="card-header"
+                            style="display: flex; justify-content: space-between; align-items: center;">
+                            <span class="card-title" id="details-title">Location Details</span>
+                            <button class="btn btn-outline btn-sm btn-danger" id="delete-loc-btn">Delete</button>
+                        </div>
+                        <div class="card-content">
+                            <!-- Stats -->
+                            <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 2rem;">
+                                <div
+                                    style="text-align: center; padding: 1rem; background: var(--secondary); border-radius: var(--radius-md);">
+                                    <div style="font-size: 1.5rem; font-weight: 700;" id="loc-total-spots">-</div>
+                                    <div style="font-size: 0.75rem; color: var(--muted-foreground);">Total Spots</div>
+                                </div>
+                                <div
+                                    style="text-align: center; padding: 1rem; background: var(--secondary); border-radius: var(--radius-md);">
+                                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--destructive);"
+                                        id="loc-occupied-spots">-</div>
+                                    <div style="font-size: 0.75rem; color: var(--muted-foreground);">Occupied</div>
+                                </div>
+                                <div
+                                    style="text-align: center; padding: 1rem; background: var(--secondary); border-radius: var(--radius-md);">
+                                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);"
+                                        id="loc-free-spots">-</div>
+                                    <div style="font-size: 0.75rem; color: var(--muted-foreground);">Available</div>
+                                </div>
+                            </div>
+
+                            <h4 style="margin-bottom: 1rem; font-size: 0.9rem; font-weight: 600;">Spot Status</h4>
+                            <div
+                                style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Spot ID</th>
+                                            <th>Status</th>
+                                            <th>Last Update</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="spots-tbody">
+                                        <!-- Spots -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="empty-state"
+                    style="text-align: center; padding: 4rem; color: var(--muted-foreground); background: var(--card); border: 1px dashed var(--border); border-radius: var(--radius-lg); height: 100%;">
+                    <i data-lucide="map-pin" style="width: 48px; height: 48px; opacity: 0.2; margin-bottom: 1rem;"></i>
+                    <p>Select a location to view details</p>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-info">
-                Managed by the <strong>Town of Apex's IT Innovations</strong> division
-            </div>
-            <div class="footer-actions">
-                <span class="footer-version" id="app-version">v0.0.0</span>
-                <button class="btn-bug-report"
-                    onclick="window.location.href='mailto:connor.mckinnis@apexnc.org?subject=Bug Report: Parking Management Dashboard'">Report
-                    Bug</button>
-            </div>
-        </div>
-    </footer>
-
     <div id="toast-container" class="toast-container"></div>
-
     <script src="/static/js/shared.js"></script>
     <script>
+        lucide.createIcons();
         let selectedLocationId = null;
 
         async function loadLocations() {
             try {
                 const locations = await getLocations();
                 renderLocations(locations);
-            } catch (error) {
-                showToast('Failed to load locations', 'error');
-            }
+            } catch (error) { showToast('Failed to load locations', 'error'); }
         }
 
         function renderLocations(locations) {
             const tbody = document.getElementById('locations-tbody');
             if (locations.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">No locations created yet</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="2" style="padding:1rem;color:var(--muted-foreground);">No locations yet</td></tr>`;
                 return;
             }
-
             tbody.innerHTML = locations.map(loc => `
-                <tr class="${selectedLocationId === loc.id ? 'active-row' : ''}" style="cursor: pointer" onclick="viewLocation('${loc.id}', '${loc.name}')">
-                    <td>${escapeHtml(loc.name)}</td>
+                <tr style="cursor: pointer; background: ${selectedLocationId === loc.id ? 'var(--secondary)' : 'transparent'}" onclick="viewLocation('${loc.id}', '${escapeHtml(loc.name)}')">
                     <td>
-                        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); viewLocation('${loc.id}', '${loc.name}')">View</button>
-                        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); confirmDeleteLocation('${loc.id}', '${escapeHtml(loc.name)}')">Delete</button>
+                        <div style="font-weight: 500;">${escapeHtml(loc.name)}</div>
+                        <div style="font-size: 0.75rem; color: var(--muted-foreground);">${loc.id.substring(0, 8)}...</div>
+                    </td>
+                    <td style="text-align: right;">
+                        <i data-lucide="chevron-right" style="width: 16px; color: var(--muted-foreground);"></i>
                     </td>
                 </tr>
             `).join('');
+            lucide.createIcons();
         }
 
-        async function confirmDeleteLocation(id, name) {
-            if (confirm(`Are you sure you want to delete "${name}"? This will unlink all cameras from this location.`)) {
-                try {
-                    await deleteLocation(id);
-                    showToast('Location deleted', 'success');
-                    if (selectedLocationId === id) {
-                        selectedLocationId = null;
-                        document.getElementById('location-details').style.display = 'none';
-                    }
-                    loadLocations();
-                } catch (error) {
-                    showToast(`Failed to delete: ${error.message}`, 'error');
-                }
-            }
-        }
-
-        async function handleAddLocation(event) {
-            event.preventDefault();
+        async function handleAddLocation(e) {
+            e.preventDefault();
             const input = document.getElementById('location-name');
-            const name = input.value.trim();
-
-            if (!name) return;
-
+            if (!input.value.trim()) return;
             try {
-                await createLocation(name);
+                await createLocation(input.value.trim());
+                showToast('Location created', 'success');
                 input.value = '';
-                showToast(`Location "${name}" created`, 'success');
                 loadLocations();
-            } catch (error) {
-                showToast(`Failed to create location: ${error.message}`, 'error');
-            }
+            } catch (err) { showToast(err.message, 'error'); }
         }
 
         async function viewLocation(id, name) {
             selectedLocationId = id;
             document.getElementById('location-details').style.display = 'block';
-            document.getElementById('details-title').textContent = `Status: ${name}`;
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('details-title').textContent = name;
 
-            // Refresh table selection
-            document.querySelectorAll('#locations-tbody tr').forEach(row => {
-                row.classList.remove('active-row');
-            });
+            document.getElementById('delete-loc-btn').onclick = () => confirmDelete(id, name);
 
-            refreshLocationStatus();
-            loadLocationSnapshots(id);
+            loadLocations(); // Re-render to update active state
+            refreshStatus();
         }
 
-        async function loadLocationSnapshots(locationId) {
-            const container = document.getElementById('location-snapshots');
-            try {
-                const cameras = await getCameras();
-                const filtered = cameras.filter(c => c.location_id === locationId);
-
-                if (filtered.length === 0) {
-                    container.innerHTML = '<div class="text-muted">No cameras linked to this location.</div>';
-                    return;
-                }
-
-                container.innerHTML = filtered.map(cam => `
-                    <div class="card p-0 overflow-hidden" style="margin-bottom: 0">
-                        <div class="camera-snapshot-container">
-                            <img src="" class="camera-snapshot-img" id="loc-snap-${cam.id}" alt="${escapeHtml(cam.name)}">
-                            <div class="snapshot-overlay">Loading ${escapeHtml(cam.name)}...</div>
-                        </div>
-                        <div class="p-xs text-center border-top">
-                            <small class="text-muted">${escapeHtml(cam.name)}</small>
-                        </div>
-                    </div>
-                `).join('');
-
-                // Load individual images
-                filtered.forEach(async cam => {
-                    try {
-                        const data = await getCameraSnapshot(cam.id);
-                        const img = document.getElementById(`loc-snap-${cam.id}`);
-                        if (img) {
-                            img.src = `data:image/jpeg;base64,${data.image_base64}`;
-                            img.parentElement.querySelector('.snapshot-overlay').style.display = 'none';
-                        }
-                    } catch (e) {
-                        const overlay = document.getElementById(`loc-snap-${cam.id}`)?.parentElement.querySelector('.snapshot-overlay');
-                        if (overlay) overlay.textContent = 'Offline';
-                    }
-                });
-
-            } catch (error) {
-                container.innerHTML = '<div class="text-danger">Failed to load camera data.</div>';
-            }
-        }
-
-        async function refreshLocationStatus() {
+        async function refreshStatus() {
             if (!selectedLocationId) return;
-
             try {
-                const status = await getLocationStatus(selectedLocationId);
-                renderSpotStatus(status);
-            } catch (error) {
-                console.error('Failed to load spot status', error);
+                const spots = await getLocationStatus(selectedLocationId);
+                const tbody = document.getElementById('spots-tbody');
+
+                document.getElementById('loc-total-spots').textContent = spots.length;
+                document.getElementById('loc-occupied-spots').textContent = spots.filter(s => s.occupied).length;
+                document.getElementById('loc-free-spots').textContent = spots.filter(s => !s.occupied).length;
+
+                if (spots.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="padding:1rem; text-align:center; color:var(--muted-foreground);">No spots configured</td></tr>';
+                } else {
+                    tbody.innerHTML = spots.map(s => `
+                        <tr>
+                            <td><code>${escapeHtml(s.spot_id)}</code></td>
+                            <td>
+                                <span style="
+                                    padding: 0.2rem 0.5rem; 
+                                    border-radius: 4px; 
+                                    background: ${s.occupied ? 'var(--destructive)' : 'var(--primary)'}; 
+                                    color: white; 
+                                    font-size: 0.75rem; font-weight: 600;">
+                                    ${s.occupied ? 'Occupied' : 'Free'}
+                                </span>
+                            </td>
+                            <td style="color: var(--muted-foreground); font-size: 0.75rem;">${formatTimestamp(s.last_update)}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function confirmDelete(id, name) {
+            if (confirm(`Delete ${name}?`)) {
+                try {
+                    await deleteLocation(id);
+                    showToast('Deleted', 'success');
+                    selectedLocationId = null;
+                    document.getElementById('location-details').style.display = 'none';
+                    document.getElementById('empty-state').style.display = 'block';
+                    loadLocations();
+                } catch (e) { showToast(e.message, 'error'); }
             }
         }
 
-        function renderSpotStatus(spots) {
-            const tbody = document.getElementById('spots-tbody');
-            const totalEl = document.getElementById('loc-total-spots');
-            const occupiedEl = document.getElementById('loc-occupied-spots');
-            const freeEl = document.getElementById('loc-free-spots');
-
-            const total = spots.length;
-            const occupied = spots.filter(s => s.occupied).length;
-            const free = total - occupied;
-
-            totalEl.textContent = total;
-            occupiedEl.textContent = occupied;
-            freeEl.textContent = free;
-
-            if (spots.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">No spots linked to this location yet. Register a camera to this location to see spots.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = spots.map(s => `
-                <tr>
-                    <td><code>${escapeHtml(s.spot_id)}</code></td>
-                    <td>
-                        <span class="badge ${s.occupied ? 'badge-danger' : 'badge-success'}">
-                            ${s.occupied ? 'Occupied' : 'Available'}
-                        </span>
-                    </td>
-                    <td class="text-muted">${formatTimestamp(s.last_update)}</td>
-                </tr>
-            `).join('');
-        }
-
-        // Auto-refresh logic for location status
-        setInterval(() => {
-            if (selectedLocationId) refreshLocationStatus();
-        }, 5000);
-
-        // Initial load
         loadLocations();
+        setInterval(() => { if (selectedLocationId) refreshStatus(); }, 5000);
     </script>
-
-    <style>
-        .active-row {
-            background-color: var(--color-background-alt);
-            font-weight: 600;
-        }
-
-        .grid-2col {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 2rem;
-        }
-
-        .metric-card {
-            text-align: center;
-        }
-
-        .horizontal-form {
-            display: flex;
-            gap: 1rem;
-            align-items: flex-end;
-        }
-
-        .horizontal-form .form-group {
-            flex: 1;
-            margin-bottom: 0;
-        }
-
-        .badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .badge-danger {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .badge-success {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .location-snapshots-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .p-xs {
-            padding: 0.5rem;
-        }
-
-        .p-0 {
-            padding: 0 !important;
-        }
-
-        .overflow-hidden {
-            overflow: hidden;
-        }
-
-        .border-top {
-            border-top: 1px solid var(--color-border);
-        }
-
-        .mb-md {
-            margin-bottom: 1.5rem;
-        }
-    </style>
 </body>
 
 </html>

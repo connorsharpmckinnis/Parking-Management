@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Monitor | SpotWatch</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo-icon">
+                <i data-lucide="camera"></i>
+            </div>
+            <div class="sidebar-brand">
+                SpotWatch
+                <span>Occupancy Detection</span>
+            </div>
+        </div>
+
+        <div class="sidebar-nav">
+            <div class="nav-section-label">Overview</div>
+            <a href="index.html" class="nav-item">
+                <i data-lucide="layout-dashboard" class="navbar-icon"></i>
+                Dashboard
+            </a>
+
+            <div class="nav-section-label">Management</div>
+            <a href="cameras.html" class="nav-item">
+                <i data-lucide="camera" class="navbar-icon"></i>
+                Cameras
+            </a>
+            <a href="monitor.html" class="nav-item active">
+                <i data-lucide="monitor-play" class="navbar-icon"></i>
+                Live Monitor
+            </a>
+
+            <div class="nav-section-label">Analytics</div>
+            <a href="locations.html" class="nav-item">
+                <i data-lucide="map-pin" class="navbar-icon"></i>
+                Locations
+            </a>
+            <a href="inspector.html" class="nav-item">
+                <i data-lucide="database" class="navbar-icon"></i>
+                Database
+            </a>
+        </div>
+
+        <div class="sidebar-footer">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>v0.8.1</span>
+                <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
+            </div>
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
+                Town of Apex IT Innovations
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="content-scrollable">
+            <div class="page-header">
+                <h1 class="page-title">Live Monitor</h1>
+                <p class="page-description">Viewing <span id="active-count">0</span> active camera feeds</p>
+            </div>
+
+            <!-- Filters Toolbar -->
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;">
+                <div class="card"
+                    style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem; border-radius: var(--radius-md);">
+                    <i data-lucide="camera" class="text-muted" style="width: 16px;"></i>
+                    <strong id="active-count-badge">0</strong> / <span id="total-count-badge">0</span> Active
+                </div>
+
+                <div style="flex: 1;"></div>
+
+                <select class="form-select" style="width: auto; padding-right: 2rem;" id="location-select">
+                    <option value="all">All Locations</option>
+                </select>
+
+                <button class="btn btn-outline" onclick="loadCameras()">
+                    <i data-lucide="refresh-cw" style="width: 16px;"></i>
+                </button>
+            </div>
+
+            <!-- Camera Grid -->
+            <div class="monitor-grid" id="camera-grid">
+                <div class="card"
+                    style="grid-column: 1 / -1; padding: 4rem; text-align: center; color: var(--muted-foreground);">
+                    <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                    Loading feeds...
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/shared.js"></script>
+    <script>
+        lucide.createIcons();
+
+        // Reused Logic from old index.html but adapted for new layout
+        let locationsMap = {};
+        let lastSnapshots = {};
+
+        async function loadCameras() {
+            try {
+                const [cameras, locations] = await Promise.all([
+                    getCameras(),
+                    getLocations()
+                ]);
+
+                locationsMap = {};
+                const locSelect = document.getElementById('location-select');
+                const selectedLoc = locSelect.value;
+
+                // Populate locations dropdown if empty (first run)
+                if (locSelect.options.length === 1) {
+                    locations.forEach(loc => {
+                        locationsMap[loc.id] = loc.name;
+                        const opt = document.createElement('option');
+                        opt.value = loc.id;
+                        opt.textContent = loc.name;
+                        locSelect.appendChild(opt);
+                    });
+                } else {
+                    locations.forEach(loc => locationsMap[loc.id] = loc.name);
+                }
+
+                // Filter
+                const filtered = selectedLoc === 'all'
+                    ? cameras
+                    : cameras.filter(c => c.location_id === selectedLoc);
+
+                renderGrid(filtered, cameras.length);
+            } catch (error) {
+                console.error(error);
+                showToast('Failed to load feeds', 'error');
+            }
+        }
+
+        function renderGrid(cameras, totalCount) {
+            const activeCount = cameras.filter(c => c.desired_state === 'running').length; // Actually filtered list active
+            const totalActive = cameras.filter(c => c.desired_state === 'running').length;
+
+            document.getElementById('active-count').textContent = activeCount;
+            document.getElementById('active-count-badge').textContent = activeCount;
+            document.getElementById('total-count-badge').textContent = totalCount;
+
+            const grid = document.getElementById('camera-grid');
+            if (cameras.length === 0) {
+                grid.innerHTML = `
+                    <div class="card" style="grid-column: 1 / -1; padding: 4rem; text-align: center; color: var(--muted-foreground); display: flex; flex-direction: column; align-items: center;">
+                        <div style="background: var(--secondary); padding: 1rem; border-radius: 50%; margin-bottom: 1rem;">
+                            <i data-lucide="camera-off" style="width: 32px; height: 32px;"></i>
+                        </div>
+                        <h3>No cameras found</h3>
+                        <p>Adjust your filters or add a new camera.</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            grid.innerHTML = cameras.map(cam => {
+                const isRunning = cam.desired_state === 'running';
+                const existingSnap = lastSnapshots[cam.id];
+                const locName = locationsMap[cam.location_id] || 'Unknown';
+
+                return `
+                    <div class="camera-card">
+                        <div class="camera-preview">
+                            <img src="${existingSnap ? 'data:image/jpeg;base64,' + existingSnap : ''}" 
+                                 id="snap-${cam.id}" 
+                                 style="${existingSnap ? '' : 'display:none'}">
+                            <div style="${existingSnap ? 'display:none' : ''}" class="placeholder-text">
+                                ${isRunning ? 'Loading Stream...' : 'Camera Stopped'}
+                            </div>
+                            
+                            <div class="status-badge" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="width: 8px; height: 8px; border-radius: 50%; background: ${isRunning ? 'var(--primary)' : 'var(--muted-foreground)'}"></div>
+                                ${isRunning ? 'Live' : 'Offline'}
+                            </div>
+                        </div>
+                        <div style="padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                                <div>
+                                    <div style="font-weight: 600;">${escapeHtml(cam.name)}</div>
+                                    <div style="font-size: 0.75rem; color: var(--muted-foreground);">${escapeHtml(locName)}</div>
+                                </div>
+                                <button class="btn btn-outline" style="padding: 0.25rem;" onclick="toggleCamera('${cam.id}', '${isRunning ? 'stopped' : 'running'}')">
+                                    <i data-lucide="${isRunning ? 'pause' : 'play'}" style="width: 14px; height: 14px;"></i>
+                                </button>
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--muted-foreground);">
+                                ${cam.last_event_time ? 'Last update: ' + formatTimestamp(cam.last_event_time) : 'No events yet'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        // Snapshot Logic
+        async function updateSnapshots() {
+            const snapImages = document.querySelectorAll('img[id^="snap-"]');
+            for (const img of snapImages) {
+                if (img.style.display === 'none' && img.nextElementSibling.textContent === 'Camera Stopped') continue;
+
+                const cameraId = img.id.replace('snap-', '');
+                try {
+                    const data = await getCameraSnapshot(cameraId);
+                    lastSnapshots[cameraId] = data.image_base64;
+                    img.src = `data:image/jpeg;base64,${data.image_base64}`;
+                    img.style.display = 'block';
+                    img.nextElementSibling.style.display = 'none'; // Hide placeholder
+                } catch {
+                    // Keep placeholder
+                }
+            }
+        }
+
+        async function toggleCamera(id, state) {
+            try {
+                await updateCamera(id, { desired_state: state });
+                showToast(`Camera ${state}`, 'success');
+                loadCameras();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        // Init
+        loadCameras();
+        document.getElementById('location-select').addEventListener('change', loadCameras);
+
+        setInterval(updateSnapshots, 60000); // 60s snapshot refresh
+        setTimeout(updateSnapshots, 1000); // Initial
+    </script>
+</body>
+
+</html>

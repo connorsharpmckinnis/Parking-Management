@@ -103,6 +103,10 @@ async function getLocations() {
     return await apiRequest('/locations');
 }
 
+async function getStats() {
+    return await apiRequest('/stats');
+}
+
 async function createLocation(name) {
     return await apiRequest('/locations', {
         method: 'POST',

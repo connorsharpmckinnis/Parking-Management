@@ -66,6 +66,14 @@ async def serve_add_camera():
 async def serve_locations():
     return FileResponse("static/locations.html")
 
+@app.get("/cameras.html")
+async def serve_cameras():
+    return FileResponse("static/cameras.html")
+
+@app.get("/monitor.html")
+async def serve_monitor():
+    return FileResponse("static/monitor.html")
+
 # Mount static files (CSS, JS, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

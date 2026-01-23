@@ -8,6 +8,12 @@ from datetime import datetime, timezone
 from ultralytics import YOLO
 import numpy as np
 import base64
+try:
+    from sahi import AutoDetectionModel
+    from sahi.predict import get_sliced_prediction
+    SAHI_AVAILABLE = True
+except ImportError:
+    SAHI_AVAILABLE = False
 
 class VisionWorker:
     def __init__(self):
@@ -17,6 +23,16 @@ class VisionWorker:
         self.api_endpoint = os.getenv("API_ENDPOINT") # http://control-plane:8000
         self.interval = float(os.getenv("POLL_INTERVAL", "5.0"))
         self.model_path = os.getenv("MODEL_PATH", "yolo26x.pt")
+        
+        # Advanced Vision Config
+        self.conf_threshold = float(os.getenv("DETECTION_CONFIDENCE", "0.25"))
+        self.use_sahi = os.getenv("SAHI_ENABLED", "false").lower() == "true"
+        self.sahi_tile_size = int(os.getenv("SAHI_TILE_SIZE", "640"))
+        self.sahi_overlap_ratio = float(os.getenv("SAHI_OVERLAP_RATIO", "0.25"))
+        
+        if self.use_sahi and not SAHI_AVAILABLE:
+            print("WARNING: SAHI enabled but not installed. Falling back to standard YOLO.")
+            self.use_sahi = False
         
         # Geometry parsing
         zone_json = os.getenv("ZONE_CONFIG", "[]")
@@ -70,7 +86,23 @@ class VisionWorker:
 
     def _process_loop(self):
         print(f"Worker for {self.camera_id} starting...")
-        model = YOLO(self.model_path)
+        
+        model = None
+        if self.use_sahi:
+            print(f"Initializing SAHI model (tile={self.sahi_tile_size}, overlap={self.sahi_overlap_ratio})...")
+            try:
+                model = AutoDetectionModel.from_pretrained(
+                    model_type='ultralytics',
+                    model_path=self.model_path,
+                    confidence_threshold=self.conf_threshold,
+                    device='cpu' # Assume CPU for container compatibility unless specified
+                )
+            except Exception as e:
+                print(f"Failed to load SAHI model: {e}")
+                self.use_sahi = False
+        
+        if not self.use_sahi:
+            model = YOLO(self.model_path)
         
         last_report = 0
         while self.running:
@@ -88,21 +120,68 @@ class VisionWorker:
             time.sleep(0.5)
 
     def _analyze_and_report(self, model, frame):
-        # Run inference
-        results = model.predict(frame, classes=self.classes, verbose=False)
         occupied_count = 0
         spot_results = []
         
-        if results:
-            boxes = results[0].boxes
+        detections = [] # List of [x1, y1, x2, y2, conf, cls]
+        
+        annotated_frame = frame.copy()
+        
+        try:
+            if self.use_sahi:
+                result = get_sliced_prediction(
+                    frame,
+                    model,
+                    slice_height=self.sahi_tile_size,
+                    slice_width=self.sahi_tile_size,
+                    overlap_height_ratio=self.sahi_overlap_ratio,
+                    overlap_width_ratio=self.sahi_overlap_ratio,
+                    verbose=0
+                )
+                # Convert SAHI results to standard format
+                for obj in result.object_prediction_list:
+                    if obj.category.id in self.classes:
+                        bbox = obj.bbox
+                        # SAHI bbox is [minx, miny, maxx, maxy]
+                        detections.append([int(bbox.minx), int(bbox.miny), int(bbox.maxx), int(bbox.maxy), obj.score.value, obj.category.id])
+                        
+                # Draw boxes manually for SAHI
+                for det in detections:
+                     cv2.rectangle(annotated_frame, (det[0], det[1]), (det[2], det[3]), (255, 0, 0), 2)
+            else:
+                # Standard YOLO
+                results = model.predict(frame, classes=self.classes, conf=self.conf_threshold, verbose=False)
+                if results:
+                    boxes = results[0].boxes
+                    #annotated_frame = results[0].plot() # Use Ultralytics plotter
+                    annotated_frame = frame.copy()
+                    for box in boxes:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                        conf = box.conf[0].cpu().numpy()
+                        cls = box.cls[0].cpu().numpy()
+                        detections.append([int(x1), int(y1), int(x2), int(y2), float(conf), int(cls)])
+
+            # Occupancy Logic (Bottom-Center)
             for zone in self.polygons:
                 poly = zone["poly"]
                 spot_id = zone["id"]
                 is_occupied = False
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    cx, cy = int((x1+x2)/2), int((y1+y2)/2)
-                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
+                
+                for det in detections:
+                    x1, y1, x2, y2, conf, cls = det
+                    # Bottom-center point
+                    bx = int((x1 + x2) / 2)
+                    by = int(y2)
+
+                    cv2.circle(
+                        annotated_frame,
+                        (bx, by),
+                        radius=7,              # visible, not subtle
+                        color=(255, 0, 255),     # yellow (BGR)
+                        thickness=-1           # filled circle
+                    )
+                    
+                    if cv2.pointPolygonTest(poly, (bx, by), False) >= 0:
                         is_occupied = True
                         break
                 
@@ -113,20 +192,16 @@ class VisionWorker:
                 
                 if is_occupied:
                     occupied_count += 1
-            
-            # Generate annotated image
-            annotated_frame = results[0].plot()
-            
-            # Draw spot zones
-            for zone, res in zip(self.polygons, spot_results):
-                poly = zone["poly"]
-                # Red if occupied, Green if free
-                color = (0, 0, 255) if res["occupied"] else (0, 255, 0)
+                
+                # Draw parking spot polygon
+                color = (0, 0, 255) if is_occupied else (0, 255, 0)
                 cv2.polylines(annotated_frame, [poly], True, color, 2)
 
             _, buffer = cv2.imencode('.jpg', annotated_frame)
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-        else:
+            
+        except Exception as e:
+            print(f"Inference error: {e}")
             jpg_as_text = None
 
         # POST Telemetry

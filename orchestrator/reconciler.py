@@ -82,6 +82,10 @@ def start_worker(camera):
         "-e", f"POLL_INTERVAL={camera['processing_interval_sec']}",
         "-e", f"ZONE_CONFIG={json.dumps(camera['geometry'])}",
         "-e", f"DETECTION_CLASSES={json.dumps(camera.get('detection_classes', [2, 3, 5, 7]))}",
+        "-e", f"DETECTION_CONFIDENCE={camera.get('detection_confidence', 0.25)}",
+        "-e", f"SAHI_ENABLED={str(camera.get('sahi_enabled', False)).lower()}",
+        "-e", f"SAHI_TILE_SIZE={camera.get('sahi_tile_size', 640)}",
+        "-e", f"SAHI_OVERLAP_RATIO={camera.get('sahi_overlap_ratio', 0.25)}",
         WORKER_IMAGE
     ]
     subprocess.run(cmd)

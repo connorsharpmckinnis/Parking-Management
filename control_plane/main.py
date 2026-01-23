@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import cv2
 import numpy as np
 import base64
@@ -383,6 +384,52 @@ def get_camera_snapshot(camera_id: uuid.UUID, annotate: bool = True, db: Session
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Snapshot error: {str(e)}")
+
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Aggregate statistics for the dashboard."""
+    total_cameras = db.query(Camera).count()
+    active_cameras = db.query(Camera).filter(Camera.status == DeviceStatus.HEALTHY).count()
+    total_locations = db.query(Location).count()
+    
+    # Spot stats
+    # We need the LATEST observation for every spot
+    # This is slightly expensive, so we might want to optimize with a materialized view later
+    # For now, we fetch all latest observations
+    
+    # Subquery to get max timestamp per spot
+    subquery = db.query(
+        SpotObservation.spot_id,
+        func.max(SpotObservation.timestamp).label('max_ts')
+    ).group_by(SpotObservation.spot_id).subquery()
+    
+    # Join to get the status
+    latest_obs = db.query(SpotObservation).join(
+        subquery,
+        (SpotObservation.spot_id == subquery.c.spot_id) & 
+        (SpotObservation.timestamp == subquery.c.max_ts)
+    ).all()
+    
+    occupied_count = sum(1 for obs in latest_obs if obs.occupied)
+    
+    # Total spots (all configured spots)
+    total_spots = db.query(Spot).count()
+    
+    # Recent events count (last 24h)
+    one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+    # Note: timestamps in DB might be naive or aware depending on driver. 
+    # Assuming naive UTC for sqlite/postgres usually implies simple comparison.
+    # If using postgres with timestamptz, ensure comp.
+    recent_events = db.query(OccupancyEvent).filter(OccupancyEvent.timestamp >= one_day_ago).count()
+    
+    return {
+        "total_cameras": total_cameras,
+        "active_cameras": active_cameras,
+        "total_locations": total_locations,
+        "total_spots": total_spots,
+        "occupied_spots": occupied_count,
+        "recent_events_24h": recent_events
+    }
 
 if __name__ == "__main__":
     import uvicorn
