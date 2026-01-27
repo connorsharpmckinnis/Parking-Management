@@ -55,11 +55,15 @@ def reconcile():
         is_running = container_name in actual_names
         
         if should_run and not is_running:
-            print(f"Starting worker for {camera['name']}...")
+            print(f"[{time.ctime()}] Starting worker for {camera['name']} ({camera['id']})...")
             start_worker(camera)
         elif not should_run and is_running:
-            print(f"Stopping worker for {camera['name']}...")
+            print(f"[{time.ctime()}] Stopping worker for {camera['name']} ({camera['id']})...")
             stop_worker(container_name)
+        elif should_run and is_running:
+            # Optionally check if container is actually running or restarting
+            pass
+
     
     # Cleanup rogue containers
     desired_names = {f"parking-worker-{c['id']}" for c in desired}
@@ -69,6 +73,11 @@ def reconcile():
             stop_worker(name)
 
 def start_worker(camera):
+    # Force remove any existing container with this name (crashed, legacy, etc)
+    # to ensure we always start fresh with the latest image.
+    container_name = f"parking-worker-{camera['id']}"
+    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+
     # Construct docker run command
     # Windows Docker Desktop usually exposes docker.sock
     cmd = [

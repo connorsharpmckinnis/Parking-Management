@@ -45,7 +45,7 @@ class Camera(Base):
     
     # Vision Config
     model_version = Column(String, default="yolo11n")
-    processing_interval_sec = Column(Integer, default=5)
+    processing_interval_sec = Column(Integer, default=60)
     geometry = Column(JSON, nullable=True) # Polygon zones
     detection_classes = Column(JSON, default=[2, 3, 5, 7]) # COCO classes: car, motorcycle, bus, truck
 

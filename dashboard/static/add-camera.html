@@ -42,7 +42,7 @@
         </div>
         <div class="sidebar-footer">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>v0.8.1</span>
+                <span>v0.8.2</span>
                 <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
             </div>
         </div>
@@ -119,18 +119,32 @@
                                     <input type="checkbox" id="sahi-toggle"> Enable SAHI (Slicing)
                                 </div>
                             </div>
+                            <div class="dashboard-grid" style="margin-top: 1rem;">
+                                <div>
+                                    <label class="form-label">Polling Interval (seconds)</label>
+                                    <input type="number" class="form-input" id="poll-interval" value="60" min="1"
+                                        max="3600">
+                                </div>
+                                <div></div>
+                            </div>
                             <div id="sahi-options"
                                 style="display:none; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border);">
                                 <div class="dashboard-grid">
-                                    <div><label class="form-label">Tile Size</label><select id="sahi-tile-size"
-                                            class="form-select">
+                                    <div>
+                                        <label class="form-label">Tile Size</label>
+                                        <select id="sahi-tile-size" class="form-select">
                                             <option value="640">640</option>
                                             <option value="512">512</option>
-                                        </select></div>
-                                    <div><label class="form-label">Overlap</label><select id="sahi-overlap"
-                                            class="form-select">
-                                            <option value="0.25">25%</option>
-                                        </select></div>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Overlap</label>
+                                        <select id="sahi-overlap" class="form-select">
+                                            <option value="0.10">10%</option>
+                                            <option value="0.15">15%</option>
+                                            <option value="0.25" selected>25%</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -141,36 +155,54 @@
                     </div>
                 </div>
 
-                <!-- Step 2 -->
-                <div class="card" id="drawing-section" style="display: none; margin-bottom: 2rem;">
-                    <div class="card-header"><span class="card-title">2. Define Zones</span></div>
-                    <div class="card-content">
-                        <p class="text-muted mb-md">Click 4 corners for each parking spot.</p>
-                        <div class="canvas-wrapper">
-                            <canvas id="zone-canvas"></canvas>
-                        </div>
-                        <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between;">
-                            <div>
-                                <strong><span id="zone-count">0</span></strong> Zones Defined
-                            </div>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <button class="btn btn-secondary" onclick="undoLastPoint()">Undo</button>
-                                <button class="btn btn-danger" onclick="clearAllZones()">Clear All</button>
-                            </div>
-                        </div>
+    </main>
+
+    <!-- Zone Drawing Modal -->
+    <div id="modal-drawing"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: rgba(0,0,0,0.8); align-items: center; justify-content: center;">
+        <div class="card" style="width: 95%; height: 95%; max-width: 1400px; display: flex; flex-direction: column;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-title">Define Parking Zones</span>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <span id="modal-zone-count" style="font-weight: 600;">0 Zones</span>
+                    <button onclick="closeDrawingModal()"
+                        style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--foreground);">&times;</button>
+                </div>
+            </div>
+            <div class="card-content"
+                style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 0;">
+                <div style="flex: 1; background: #000; overflow: auto; position: relative;">
+                    <div id="canvas-container" style="display: inline-block;">
+                        <canvas id="zone-canvas"></canvas>
                     </div>
                 </div>
 
-                <!-- Step 3 -->
-                <div class="card" id="register-section" style="display: none;">
-                    <div class="card-content">
-                        <button class="btn btn-primary" style="width: 100%; padding: 1rem;" onclick="registerCamera()">
-                            Register Camera
-                        </button>
+                <div
+                    style="padding: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--card);">
+                    <div class="text-muted" style="font-size: 0.9rem;">
+                        <i data-lucide="info" style="width: 14px; vertical-align: middle;"></i> Click 4 corners for each
+                        spot. Scroll to pan.
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-secondary" onclick="undoLastPoint()">Undo</button>
+                        <button class="btn btn-danger" onclick="clearAllZones()">Clear All</button>
+                        <button class="btn btn-primary" onclick="closeDrawingModal()">Done - Return to Form</button>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="card" id="register-section" style="display: none;">
+        <div class="card-content">
+            <button class="btn btn-primary" style="width: 100%; padding: 1rem;" onclick="registerCamera()">
+                Register Camera
+            </button>
+        </div>
+    </div>
+    </div>
+    </div>
     </main>
 
     <div id="toast-container" class="toast-container"></div>
@@ -207,26 +239,45 @@
                 const res = await captureFrame(getStreamUrl());
                 capturedImageUrl = 'data:image/jpeg;base64,' + res.image_base64;
                 originalSize = { width: res.width, height: res.height };
+
+                openDrawingModal();
                 initCanvas(capturedImageUrl);
-                document.getElementById('drawing-section').style.display = 'block';
+
                 document.getElementById('register-section').style.display = 'block';
             } catch (e) { showToast(e.message, 'error'); }
             btn.disabled = false; btn.textContent = 'Capture Frame & Configure Zones';
         }
 
+        function openDrawingModal() {
+            document.getElementById('modal-drawing').style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function closeDrawingModal() {
+            document.getElementById('modal-drawing').style.display = 'none';
+        }
+
         function initCanvas(url) {
             if (fabricCanvas) fabricCanvas.dispose();
-            const displayWidth = 750;
-            const aspectRatio = originalSize.height / originalSize.width;
-            const displayHeight = displayWidth * aspectRatio;
-            const el = document.getElementById('zone-canvas');
-            el.width = displayWidth; el.height = displayHeight;
 
-            fabricCanvas = new fabric.Canvas('zone-canvas', { selection: false, width: displayWidth, height: displayHeight });
+            const el = document.getElementById('zone-canvas');
+            // USE 1:1 logical pixels
+            el.width = originalSize.width;
+            el.height = originalSize.height;
+
+            fabricCanvas = new fabric.Canvas('zone-canvas', {
+                selection: false,
+                width: originalSize.width,
+                height: originalSize.height,
+                hoverCursor: 'crosshair',
+                targetFindTolerance: 15
+            });
+
             fabric.Image.fromURL(url, (img) => {
-                img.set({ scaleX: displayWidth / originalSize.width, scaleY: displayHeight / originalSize.height, originX: 'left', originY: 'top' });
+                img.set({ originX: 'left', originY: 'top', selectable: false, evented: false });
                 fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
             });
+
             fabricCanvas.on('mouse:down', handleCanvasClick);
             currentPoints = []; completedZones = []; updateZoneUI();
         }
@@ -234,12 +285,12 @@
         function handleCanvasClick(opt) {
             const ptr = fabricCanvas.getPointer(opt.e);
             const x = Math.round(ptr.x), y = Math.round(ptr.y);
-            const circle = new fabric.Circle({ left: x - 5, top: y - 5, radius: 5, fill: '#f1be48', stroke: '#000', selectable: false, evented: false });
+            const circle = new fabric.Circle({ left: x, top: y, radius: 10, fill: '#f1be48', stroke: '#000', strokeWidth: 2, originX: 'center', originY: 'center', selectable: false, evented: false });
             fabricCanvas.add(circle);
 
             if (currentPoints.length > 0) {
                 const prev = currentPoints[currentPoints.length - 1];
-                const line = new fabric.Line([prev.x, prev.y, x, y], { stroke: '#f1be48', strokeWidth: 2, selectable: false });
+                const line = new fabric.Line([prev.x, prev.y, x, y], { stroke: '#f1be48', strokeWidth: 3, selectable: false });
                 fabricCanvas.add(line);
             }
             currentPoints.push({ x, y });
@@ -270,13 +321,27 @@
             // Implem:
             capturedImageUrl && initCanvas(capturedImageUrl); // simply re-init
         }
-        function updateZoneUI() { document.getElementById('zone-count').textContent = completedZones.length; }
+        function updateZoneUI() {
+            const count = completedZones.length;
+            const text = `${count} Zone${count === 1 ? '' : 's'}`;
+            const el = document.getElementById('modal-zone-count');
+            if (el) el.textContent = text;
+
+            const btn = document.getElementById('capture-btn');
+            if (btn) btn.textContent = `Update Zones (${count} defined)`;
+        }
 
         async function registerCamera() {
             if (completedZones.length === 0) { showToast('Define zones', 'error'); return; }
-            const scaleX = originalSize.width / fabricCanvas.width;
-            const scaleY = originalSize.height / fabricCanvas.height;
-            const scaledZones = completedZones.map(z => ({ id: z.id, points: z.points.map(p => [Math.round(p.x * scaleX), Math.round(p.y * scaleY)]) }));
+
+            const locId = document.getElementById('camera-location-id').value;
+            if (!locId) { showToast('Please select a location.', 'error'); return; }
+
+            // Logical scale 1:1, so no scaling needed
+            const scaledZones = completedZones.map(z => ({
+                id: z.id,
+                points: z.points.map(p => [Math.round(p.x), Math.round(p.y)])
+            }));
 
             const payload = {
                 name: document.getElementById('camera-name').value,
@@ -287,6 +352,7 @@
                 geometry: scaledZones,
                 detection_classes: [2, 3, 5, 7], // Hardcoded for simplicity or restore checkboxes if critical
                 detection_confidence: parseFloat(document.getElementById('detection-conf').value) || 0.25,
+                processing_interval_sec: parseInt(document.getElementById('poll-interval').value) || 60,
                 sahi_enabled: document.getElementById('sahi-toggle').checked,
                 sahi_tile_size: parseInt(document.getElementById('sahi-tile-size').value) || 640,
                 sahi_overlap_ratio: parseFloat(document.getElementById('sahi-overlap').value) || 0.25

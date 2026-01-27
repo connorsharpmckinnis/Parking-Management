@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 </head>
 
 <body>
@@ -32,7 +33,7 @@
         </div>
         <div class="sidebar-footer">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>v0.8.1</span>
+                <span>v0.8.2</span>
                 <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
             </div>
             <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
@@ -62,6 +63,40 @@
         </div>
     </main>
 
+    <!-- Edit Zones Modal -->
+    <div id="modal-edit"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: rgba(0,0,0,0.8); align-items: center; justify-content: center;">
+        <div class="card"
+            style="width: 90%; max-width: 900px; max-height: 95vh; display: flex; flex-direction: column;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-title">Edit Parking Zones</span>
+                <button onclick="closeEditModal()"
+                    style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--foreground);">&times;</button>
+            </div>
+            <div class="card-content" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column;">
+                <div
+                    style="flex: 1; background: #000; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: auto; display: block; min-height: 400px; position: relative;">
+                    <div id="canvas-container" style="display: inline-block;">
+                        <canvas id="edit-canvas"></canvas>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 0.9rem; color: var(--muted-foreground);">
+                        <i data-lucide="info" style="width: 14px; vertical-align: middle;"></i> Drag corners to adjust.
+                        Click "Save Changes" to apply.
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+                        <button class="btn btn-primary" onclick="saveZones()">Save Changes</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <div id="toast-container" class="toast-container"></div>
     <script src="/static/js/shared.js"></script>
     <script>
@@ -69,6 +104,10 @@
         let locationsMap = {};
         let cams = [];
         let snapshots = {};
+        let fabCanvas = null;
+        let activeCamId = null;
+        let originalDims = { w: 0, h: 0 };
+
 
         async function load() {
             try {
@@ -102,7 +141,14 @@
                              <button class="btn btn-outline btn-sm" onclick="deleteCam('${c.id}', '${escapeHtml(c.name)}')"><i data-lucide="trash-2" style="width: 14px; color: var(--destructive);"></i></button>
                          </div>
                          
+                         <div style="margin-bottom: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="openEditModal('${c.id}')">
+                                <i data-lucide="edit-3" style="width: 14px; margin-right: 0.5rem;"></i> Edit Zones
+                            </button>
+                         </div>
+                         
                          <div style="margin-top: auto; padding-top: 1rem; display: flex; align-items: center; justify-content: space-between;">
+
                              <div style="font-size: 0.75rem;">
                                  status: <span style="font-weight: 600; color: ${c.status === 'healthy' ? 'var(--primary)' : 'var(--muted-foreground)'}">${c.status}</span>
                              </div>
@@ -144,7 +190,167 @@
             }
         }
 
+        // --- Edit Modal Logic ---
+        async function openEditModal(camId) {
+            activeCamId = camId;
+            const cam = cams.find(c => c.id === camId);
+            if (!cam) return;
+
+            document.getElementById('modal-edit').style.display = 'flex';
+
+            showToast('Loading snapshot...', 'info');
+            try {
+                // Use apiRequest which handles the CONTROL_PLANE_URL (localhost:8000)
+                const data = await apiRequest(`/cameras/${camId}/snapshot?annotate=false`);
+                initEditCanvas(data.image_base64, data.width, data.height, cam.geometry);
+            } catch (e) {
+                console.error(e);
+                showToast("Could not load snapshot. Is camera running?", "error");
+                closeEditModal();
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('modal-edit').style.display = 'none';
+            if (fabCanvas) {
+                fabCanvas.dispose();
+                fabCanvas = null;
+            }
+        }
+
+        function initEditCanvas(base64Img, origW, origH, geometry) {
+            originalDims = { w: origW, h: origH };
+
+            const canvasEl = document.getElementById('edit-canvas');
+            // USE 1:1 Logical Scale
+            canvasEl.width = origW;
+            canvasEl.height = origH;
+
+            if (fabCanvas) fabCanvas.dispose();
+            fabCanvas = new fabric.Canvas('edit-canvas', {
+                selection: false,
+                width: origW,
+                height: origH,
+                hoverCursor: 'pointer',
+                renderOnAddRemove: false, // Performance logic
+                targetFindTolerance: 15    // Much easier to grab points
+            });
+
+            fabric.Image.fromURL('data:image/jpeg;base64,' + base64Img, (img) => {
+                fabCanvas.setBackgroundImage(img, () => {
+                    // Load existing zones
+                    if (geometry && Array.isArray(geometry)) {
+                        geometry.forEach(zone => {
+                            // Points are in absolute pixels
+                            const pts = zone.points.map(p => ({ x: p[0], y: p[1] }));
+
+                            const poly = new fabric.Polygon(pts, {
+                                fill: 'rgba(68, 136, 62, 0.4)',
+                                stroke: '#44883e',
+                                strokeWidth: 3,
+                                objectCaching: false,
+                                selectable: false,
+                                evented: false, // Let events pass to vertices
+                                data: { id: zone.id }
+                            });
+
+                            fabCanvas.add(poly);
+                            setupPolyControls(poly);
+                        });
+                    }
+                    fabCanvas.requestRenderAll();
+                }, {
+                    originX: 'left',
+                    originY: 'top'
+                });
+            });
+        }
+
+        // Helper to retrieve polygon points for editing
+        // Since Fabric.js standard controls scale/rotate, not edit vertices suitable for this.
+        // We will implement a simple "Edit Mode" where we just draw circles at vertices that are draggable.
+        // When circle moves, update poly.
+        function setupPolyControls(poly) {
+            const points = poly.points;
+
+            points.forEach((p, index) => {
+                const circle = new fabric.Circle({
+                    radius: 10,
+                    fill: 'rgba(255, 255, 0, 0.8)',
+                    stroke: '#000',
+                    strokeWidth: 2,
+                    left: p.x,
+                    top: p.y,
+                    originX: 'center',
+                    originY: 'center',
+                    hasControls: false,
+                    hasBorders: false,
+                    hoverCursor: 'grab',
+                    data: { poly: poly, index: index }
+                });
+
+                // Visual confirmation on hover
+                circle.on('mouseover', () => {
+                    circle.set({ fill: '#ff6b00', radius: 12 });
+                    fabCanvas.requestRenderAll();
+                });
+
+                circle.on('mouseout', () => {
+                    circle.set({ fill: 'rgba(255, 255, 0, 0.8)', radius: 10 });
+                    fabCanvas.requestRenderAll();
+                });
+
+                circle.on('moving', function () {
+                    poly.points[index].x = circle.left;
+                    poly.points[index].y = circle.top;
+                    poly.setCoords();
+                    fabCanvas.requestRenderAll();
+                });
+
+                fabCanvas.add(circle);
+            });
+        }
+
+        async function saveZones() {
+            if (!activeCamId) return;
+
+            const polys = fabCanvas.getObjects('polygon');
+            const newGeometry = [];
+
+            polys.forEach(poly => {
+                // Since we are 1:1 logical pixels, we just take the points directly
+                const pointsToSave = poly.points.map(p => [
+                    Math.round(p.x),
+                    Math.round(p.y)
+                ]);
+
+                if (pointsToSave.length >= 3) {
+                    newGeometry.push({
+                        id: poly.data.id,
+                        points: pointsToSave
+                    });
+                }
+            });
+
+            try {
+                // Use updateCamera helper from shared.js
+                await updateCamera(activeCamId, { geometry: newGeometry });
+
+                showToast("Zones saved! Vision worker will update shortly.", "success");
+                closeEditModal();
+                load();
+            } catch (e) {
+                showToast("Error saving: " + e.message, "error");
+            }
+        }
+
+
+        // Initial load and auto-refresh
         load();
+
+        // Refresh metadata every 10 seconds
+        const refresh = new AutoRefresh(load, 10000);
+        refresh.start();
     </script>
 </body>
 

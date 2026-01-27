@@ -31,7 +31,7 @@ class CameraBase(BaseModel):
     connection_type: ConnectionType = ConnectionType.FIBER
     stream_url: str
     model_version: str = "yolo11n"
-    processing_interval_sec: int = 5
+    processing_interval_sec: int = 60
     geometry: Optional[Any] = None
     detection_classes: List[int] = [2, 3, 5, 7]  # COCO classes
     

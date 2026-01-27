@@ -55,7 +55,7 @@
 
         <div class="sidebar-footer">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>v0.8.1</span>
+                <span>v0.8.2</span>
                 <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
             </div>
             <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
@@ -239,9 +239,12 @@
             } catch (e) { showToast(e.message, 'error'); }
         }
 
-        // Init
+        // Initial load and auto-refresh
         loadCameras();
         document.getElementById('location-select').addEventListener('change', loadCameras);
+
+        const refresh = new AutoRefresh(loadCameras, 10000);
+        refresh.start();
 
         setInterval(updateSnapshots, 60000); // 60s snapshot refresh
         setTimeout(updateSnapshots, 1000); // Initial

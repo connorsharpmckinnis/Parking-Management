@@ -48,10 +48,18 @@ class VisionWorker:
         self.running = False
         self.latest_frame = None
         self.lock = threading.Lock()
+        
+        # Initial config fetch
+        self._fetch_remote_config()
+
 
     def _parse_zones(self, zone_json):
         try:
-            data = json.loads(zone_json)
+            if isinstance(zone_json, str):
+                data = json.loads(zone_json)
+            else:
+                data = zone_json
+                
             zones = []
             for i, item in enumerate(data):
                 pts = np.array(item["points"], np.int32).reshape((-1, 1, 2))
@@ -62,6 +70,27 @@ class VisionWorker:
         except Exception as e:
             print(f"Error parsing zones: {e}")
             return []
+
+    def _fetch_remote_config(self):
+        """Fetch latest geometry from Control Plane."""
+        if not self.api_endpoint or not self.camera_id:
+            return
+
+        try:
+            url = f"{self.api_endpoint}/cameras/{self.camera_id}"
+            resp = requests.get(url, timeout=3)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Update geometry if present
+                if "geometry" in data:
+                    new_polys = self._parse_zones(data["geometry"])
+                    if new_polys:
+                        self.polygons = new_polys
+                        self.total_slots = len(self.polygons)
+                        print(f"Config updated: {self.total_slots} zones loaded.")
+        except Exception as e:
+            print(f"Config fetch failed: {e}")
+
 
     def start(self):
         self.running = True
@@ -105,8 +134,17 @@ class VisionWorker:
             model = YOLO(self.model_path)
         
         last_report = 0
+        last_config_check = 0
+        config_interval = 15.0 # Check for config changes every 15s
+
         while self.running:
             now = time.time()
+            
+            # Periodically check for config updates
+            if now - last_config_check >= config_interval:
+                self._fetch_remote_config()
+                last_config_check = now
+
             if now - last_report >= self.interval:
                 with self.lock:
                     frame = self.latest_frame.copy() if self.latest_frame is not None else None

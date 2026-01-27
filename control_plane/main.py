@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -25,6 +27,15 @@ from control_plane.schemas import (
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Camera Control Plane")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all for local dev
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/")
 async def root():
@@ -145,14 +156,17 @@ def _sync_spots(db: Session, db_camera: Camera):
             continue
         
         seen_ids.add(spot_id)
+        
+        # Internal UUID for unique identification across locations
+        prefixed_id = f"{db_camera.location_id}:{spot_id}"
             
         # Check if spot exists
-        db_spot = db.query(Spot).filter(Spot.id == spot_id).first()
+        db_spot = db.query(Spot).filter(Spot.id == prefixed_id).first()
         if not db_spot:
             db_spot = Spot(
-                id=spot_id,
+                id=prefixed_id,
                 location_id=db_camera.location_id,
-                name=spot_id # Default name to ID
+                name=spot_id # User facing name
             )
             db.add(db_spot)
         else:
@@ -201,9 +215,9 @@ def _compute_status(camera: Camera) -> DeviceStatus:
         
     delta = (datetime.now(timezone.utc) - camera.last_heartbeat).total_seconds()
     
-    if delta > 120: # 2 minutes without heartbeat
+    if delta > 30: # 30s without heartbeat (was 120)
         return DeviceStatus.DISCONNECTED
-    elif delta > 30: # 30s without heartbeat
+    elif delta > 10: # 10s without heartbeat (was 30)
         return DeviceStatus.DEGRADED
         
     return camera.status # Return reported status (usually HEALTHY)
@@ -250,9 +264,10 @@ def camera_event(camera_id: uuid.UUID, update: OccupancyUpdate, db: Session = De
         
         for spot in update.metadata_json["spot_details"]:
             s_id = spot["spot_id"]
-            if s_id in valid_spot_ids:
+            prefixed_id = f"{db_camera.location_id}:{s_id}"
+            if prefixed_id in valid_spot_ids:
                 obs = SpotObservation(
-                    spot_id=s_id,
+                    spot_id=prefixed_id,
                     camera_id=camera_id,
                     occupied=bool(spot["occupied"]),
                     timestamp=update.timestamp
@@ -430,6 +445,59 @@ def get_stats(db: Session = Depends(get_db)):
         "occupied_spots": occupied_count,
         "recent_events_24h": recent_events
     }
+
+# --- Analytics & Reporting ---
+
+@app.get("/spots")
+def list_spots(location_id: Optional[uuid.UUID] = None, db: Session = Depends(get_db)):
+    """Return all spots with their latest status and location name."""
+    query = db.query(
+        Spot,
+        Location.name.label('location_name')
+    ).join(Location, Spot.location_id == Location.id)
+    
+    if location_id:
+        query = query.filter(Spot.location_id == location_id)
+        
+    spots_data = query.all()
+    results = []
+    
+    for row in spots_data:
+        spot = row.Spot
+        # Get latest observation
+        latest = db.query(SpotObservation)\
+            .filter(SpotObservation.spot_id == spot.id)\
+            .order_by(SpotObservation.timestamp.desc())\
+            .first()
+            
+        results.append({
+            "id": spot.id,
+            "name": spot.name,
+            "location_id": spot.location_id,
+            "location_name": row.location_name,
+            "occupied": latest.occupied if latest else False,
+            "last_update": latest.timestamp if latest else None
+        })
+        
+    return results
+
+@app.get("/spots/{spot_id}/history")
+def get_spot_history_endpoint(spot_id: str, limit: int = 50, db: Session = Depends(get_db)):
+    """Get recent status changes for a specific spot."""
+    history = db.query(SpotObservation)\
+        .filter(SpotObservation.spot_id == spot_id)\
+        .order_by(SpotObservation.timestamp.desc())\
+        .limit(limit)\
+        .all()
+        
+    return [
+        {
+            "timestamp": obs.timestamp,
+            "occupied": obs.occupied,
+            "camera_id": obs.camera_id
+        }
+        for obs in history
+    ]
 
 if __name__ == "__main__":
     import uvicorn

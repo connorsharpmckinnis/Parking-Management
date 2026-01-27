@@ -1,10 +1,10 @@
 /**
  * Parking Management Dashboard - Shared JavaScript
- * Town of Apex | v0.8.1
+ * Town of Apex | v0.8.2
  */
 
-const APP_VERSION = '0.8.1';
-const CONTROL_PLANE_URL = '/api'; // Proxied through our server
+const APP_VERSION = '0.8.2';
+const CONTROL_PLANE_URL = 'http://localhost:8000'; // Direct access for local dev
 
 // ============================================
 // Utility Functions
@@ -157,6 +157,14 @@ async function captureFrame(streamUrl) {
         method: 'POST',
         body: JSON.stringify({ stream_url: streamUrl })
     });
+}
+
+async function getSpots() {
+    return await apiRequest('/spots');
+}
+
+async function getSpotHistory(spotId, limit = 50) {
+    return await apiRequest(`/spots/${spotId}/history?limit=${limit}`);
 }
 
 // ============================================

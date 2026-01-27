@@ -36,7 +36,7 @@
         </div>
         <div class="sidebar-footer">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>v0.8.1</span>
+                <span>v0.8.2</span>
                 <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
             </div>
             <!-- Footer Content (previously outside sidebar) -->
@@ -63,6 +63,9 @@
                         </button>
                         <button class="btn btn-outline" id="btn-events" onclick="switchTab('events')">
                             <i data-lucide="activity" style="width:16px; margin-right: 0.5rem;"></i> Occupancy Events
+                        </button>
+                        <button class="btn btn-outline" id="btn-spots" onclick="switchTab('spots')">
+                            <i data-lucide="map-pin" style="width:16px; margin-right: 0.5rem;"></i> Spots
                         </button>
                     </div>
                 </div>
@@ -122,6 +125,53 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Spots Table -->
+                    <div id="tab-spots" style="display: none;">
+                        <div
+                            style="padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <span class="text-muted" style="font-size: 0.875rem;">Consolidated spot tracking across
+                                cameras</span>
+
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <i data-lucide="filter" style="width: 14px; color: var(--muted-foreground);"></i>
+                                <select id="filter-location" class="form-select"
+                                    style="width: auto; height: 32px; padding: 0 2rem 0 0.5rem; font-size: 0.75rem;"
+                                    onchange="renderSpots()">
+                                    <option value="all">All Locations</option>
+                                </select>
+                                <input type="text" id="search-spot" placeholder="Search spot ID..." class="form-input"
+                                    style="width: 150px; height: 32px; font-size: 0.75rem;" oninput="renderSpots()">
+                            </div>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th onclick="sortSpots('name')" style="cursor: pointer;">Spot ID <i
+                                                data-lucide="chevrons-up-down"
+                                                style="width: 12px; vertical-align: middle;"></i></th>
+                                        <th onclick="sortSpots('location_name')" style="cursor: pointer;">Location <i
+                                                data-lucide="chevrons-up-down"
+                                                style="width: 12px; vertical-align: middle;"></i></th>
+                                        <th onclick="sortSpots('occupied')" style="cursor: pointer;">Current Status <i
+                                                data-lucide="chevrons-up-down"
+                                                style="width: 12px; vertical-align: middle;"></i></th>
+                                        <th onclick="sortSpots('last_update')" style="cursor: pointer;">Last Update <i
+                                                data-lucide="chevrons-up-down"
+                                                style="width: 12px; vertical-align: middle;"></i></th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="spots-tbody">
+                                    <tr>
+                                        <td colspan="5" style="padding: 1rem; color: var(--muted-foreground);">
+                                            Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -141,16 +191,56 @@
         </div>
     </div>
 
+    <!-- History Modal -->
+    <div id="modal-history"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+        <div class="card"
+            style="width: 80%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-title">Observation History: <span id="history-spot-name"></span></span>
+                <button onclick="document.getElementById('modal-history').style.display='none'"
+                    style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div class="card-content" style="overflow-y: auto; padding: 1rem;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th>Source Camera</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/shared.js"></script>
     <script>
         lucide.createIcons();
         let locationsMap = {};
+        let allSpots = [];
+        let currentSort = { col: 'name', dir: 1 };
 
         async function loadData() {
             try {
-                const [cameras, locations] = await Promise.all([getCameras(), getLocations()]);
-                locations.forEach(loc => locationsMap[loc.id] = loc.name);
+                const [cameras, locations, spots] = await Promise.all([getCameras(), getLocations(), getSpots()]);
+
+                // Populate location maps/filters
+                const locFilter = document.getElementById('filter-location');
+                locations.forEach(loc => {
+                    locationsMap[loc.id] = loc.name;
+                    const opt = document.createElement('option');
+                    opt.value = loc.id;
+                    opt.textContent = loc.name;
+                    if (locFilter.options.length < locations.length + 1) locFilter.appendChild(opt);
+                });
+
                 renderCameras(cameras);
+
+                allSpots = spots;
+                renderSpots();
             } catch (e) { console.error(e); }
 
             try {
@@ -200,11 +290,93 @@
                         <span class="text-muted"> / ${evt.total_slots}</span>
                     </td>
                     <td>
-                        ${hasDetails ? `<button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="showEvent(${evt.id})">View Analysis</button>` : '-'}
+                        <div style="display: flex; gap: 0.5rem;">
+                            ${hasDetails ? `<button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="showEvent(${evt.id})"><i data-lucide="eye" style="width: 12px;"></i></button>` : '-'}
+                        </div>
                     </td>
                 </tr>
                 `;
             }).join('');
+            lucide.createIcons();
+        }
+
+        function renderSpots() {
+            const tbody = document.getElementById('spots-tbody');
+            const locFilter = document.getElementById('filter-location').value;
+            const search = document.getElementById('search-spot').value.toLowerCase();
+
+            let filtered = allSpots.filter(s => {
+                const matchesLoc = locFilter === 'all' || s.location_id === locFilter;
+                const matchesSearch = s.name.toLowerCase().includes(search);
+                return matchesLoc && matchesSearch;
+            });
+
+            // Sort
+            filtered.sort((a, b) => {
+                let vA = a[currentSort.col];
+                let vB = b[currentSort.col];
+                if (vA < vB) return -1 * currentSort.dir;
+                if (vA > vB) return 1 * currentSort.dir;
+                return 0;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="padding:1rem;">No spots match filters</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(s => `
+                <tr>
+                    <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td>${escapeHtml(s.location_name)}</td>
+                    <td>
+                        <span class="badge" style="background: ${s.occupied ? '#fee2e2' : '#dcfce7'}; color: ${s.occupied ? '#991b1b' : '#166534'}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                            ${s.occupied ? 'OCCUPIED' : 'FREE'}
+                        </span>
+                    </td>
+                    <td class="text-muted">${formatTimestamp(s.last_update)}</td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="showHistory('${s.id}', '${escapeHtml(s.name)}')">
+                            <i data-lucide="history" style="width:14px; margin-right: 0.25rem;"></i> History
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function sortSpots(col) {
+            if (currentSort.col === col) {
+                currentSort.dir *= -1;
+            } else {
+                currentSort.col = col;
+                currentSort.dir = 1;
+            }
+            renderSpots();
+        }
+
+        async function showHistory(spotId, name) {
+            document.getElementById('history-spot-name').textContent = name;
+            const tbody = document.getElementById('history-tbody');
+            tbody.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+            document.getElementById('modal-history').style.display = 'flex';
+
+            try {
+                const history = await getSpotHistory(spotId);
+                if (history.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3">No history found</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = history.map(h => `
+                    <tr>
+                        <td style="font-size: 0.8rem;">${formatTimestamp(h.timestamp)}</td>
+                        <td><span style="color: ${h.occupied ? 'var(--destructive)' : 'var(--primary)'}">${h.occupied ? 'Occupied' : 'Free'}</span></td>
+                        <td><code>${h.camera_id.substring(0, 8)}</code></td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="3">Error loading history</td></tr>';
+            }
         }
 
         function showEvent(id) {
@@ -236,17 +408,21 @@
         function switchTab(tab) {
             document.getElementById('tab-cameras').style.display = tab === 'cameras' ? 'block' : 'none';
             document.getElementById('tab-events').style.display = tab === 'events' ? 'block' : 'none';
+            document.getElementById('tab-spots').style.display = tab === 'spots' ? 'block' : 'none';
 
             document.getElementById('btn-cameras').classList.toggle('active', tab === 'cameras');
-            // Manually handling styling for 'active' outline button if needed, but existing css handles .active on some classes.
-            // Let's just swap background
-            if (tab === 'cameras') {
-                document.getElementById('btn-cameras').style.background = 'var(--secondary)';
-                document.getElementById('btn-events').style.background = 'transparent';
-            } else {
-                document.getElementById('btn-cameras').style.background = 'transparent';
-                document.getElementById('btn-events').style.background = 'var(--secondary)';
-            }
+            document.getElementById('btn-events').classList.toggle('active', tab === 'events');
+            document.getElementById('btn-spots').classList.toggle('active', tab === 'spots');
+
+            // Button styling
+            ['cameras', 'events', 'spots'].forEach(t => {
+                const btn = document.getElementById(`btn-${t}`);
+                if (tab === t) {
+                    btn.style.background = 'var(--secondary)';
+                } else {
+                    btn.style.background = 'transparent';
+                }
+            });
         }
 
         loadData();
