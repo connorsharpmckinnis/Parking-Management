@@ -174,24 +174,79 @@ async function deleteSpot(spotId) {
 }
 
 // ============================================
-// DOM Ready & Version Injection
+// UI Components
+// ============================================
+
+/**
+ * Standardized Sidebar Implementation
+ */
+function initSidebar() {
+    const sidebarTarget = document.getElementById('sidebar-target');
+    if (!sidebarTarget) return;
+
+    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+
+    // Normalize index/root
+    const activePage = (currentPage === '' || currentPage === '/') ? 'index.html' : currentPage;
+
+    const sidebarHtml = `
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo-icon"><i data-lucide="camera"></i></div>
+            <div class="sidebar-brand">PeakPark<span>Occupancy Detection</span></div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-section-label">Overview</div>
+            <a href="index.html" class="nav-item ${activePage === 'index.html' ? 'active' : ''}">
+                <i data-lucide="layout-dashboard" class="navbar-icon"></i>Dashboard
+            </a>
+            
+            <div class="nav-section-label">Management</div>
+            <a href="cameras.html" class="nav-item ${activePage === 'cameras.html' ? 'active' : ''}">
+                <i data-lucide="camera" class="navbar-icon"></i>Cameras
+            </a>
+            <a href="monitor.html" class="nav-item ${activePage === 'monitor.html' ? 'active' : ''}">
+                <i data-lucide="monitor-play" class="navbar-icon"></i>Live Monitor
+            </a>
+            
+            <div class="nav-section-label">Analytics</div>
+            <a href="locations.html" class="nav-item ${activePage === 'locations.html' ? 'active' : ''}">
+                <i data-lucide="map-pin" class="navbar-icon"></i>Locations
+            </a>
+            <a href="analytics.html" class="nav-item ${activePage === 'analytics.html' ? 'active' : ''}">
+                <i data-lucide="download" class="navbar-icon"></i>Data Export
+            </a>
+            <a href="inspector.html" class="nav-item ${activePage === 'inspector.html' ? 'active' : ''}">
+                <i data-lucide="database" class="navbar-icon"></i>Database
+            </a>
+        </div>
+        <div class="sidebar-footer">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="app-version">v${APP_VERSION}</span>
+                <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
+            </div>
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
+                Town of Apex IT Innovations
+            </div>
+        </div>
+    </nav>
+    `;
+
+    sidebarTarget.innerHTML = sidebarHtml;
+}
+
+// ============================================
+// DOM Ready & Global Initialization
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Inject version into footer
-    const versionEl = document.getElementById('app-version');
-    if (versionEl) {
-        versionEl.textContent = `v${APP_VERSION}`;
-    }
+    // 1. Initialize Sidebar
+    initSidebar();
 
-    // Set active nav tab based on current page
-    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-    document.querySelectorAll('.nav-tab').forEach(tab => {
-        const tabPage = tab.getAttribute('href');
-        if (tabPage === currentPage || (currentPage === '' && tabPage === 'index.html')) {
-            tab.classList.add('active');
-        }
-    });
+    // 2. Initialize Icons (Lucide)
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
 });
 
 // ============================================

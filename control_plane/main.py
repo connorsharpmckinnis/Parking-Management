@@ -199,9 +199,10 @@ def _compute_status(camera: Camera) -> DeviceStatus:
         
     delta = (datetime.now(timezone.utc) - camera.last_heartbeat).total_seconds()
     
-    if delta > 30: # 30s without heartbeat (was 120)
+    # Relaxed thresholds to accommodate default 60s polling intervals
+    if delta > 600: # 10 minutes without heartbeat
         return DeviceStatus.DISCONNECTED
-    elif delta > 10: # 10s without heartbeat (was 30)
+    elif delta > 300: # 5 minutes without heartbeat
         return DeviceStatus.DEGRADED
         
     return camera.status # Return reported status (usually HEALTHY)
@@ -476,6 +477,172 @@ def get_spot_history_endpoint(spot_id: str, limit: int = 50, db: Session = Depen
         }
         for obs in history
     ]
+
+# --- Data Export (Power BI / CSV) ---
+
+from fastapi.responses import StreamingResponse
+import csv
+import io
+
+@app.get("/analytics/observations")
+def export_observations(
+    location_id: Optional[uuid.UUID] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    format: str = "csv",
+    db: Session = Depends(get_db)
+):
+    """
+    Export spot observations with location and spot names for Power BI.
+    
+    Parameters:
+    - location_id: Optional filter to a specific location.
+    - start_date: Optional start of time range (ISO format).
+    - end_date: Optional end of time range (ISO format).
+    - format: 'csv' (default) or 'json'.
+    """
+    query = db.query(
+        SpotObservation.id,
+        SpotObservation.timestamp,
+        SpotObservation.occupied,
+        SpotObservation.spot_id,
+        Spot.name.label('spot_name'),
+        Spot.location_id,
+        Location.name.label('location_name'),
+        SpotObservation.camera_id,
+        Camera.name.label('camera_name')
+    ).join(Spot, SpotObservation.spot_id == Spot.id)\
+     .join(Location, Spot.location_id == Location.id)\
+     .join(Camera, SpotObservation.camera_id == Camera.id)
+    
+    if location_id:
+        query = query.filter(Spot.location_id == location_id)
+    if start_date:
+        query = query.filter(SpotObservation.timestamp >= start_date)
+    if end_date:
+        query = query.filter(SpotObservation.timestamp <= end_date)
+    
+    query = query.order_by(SpotObservation.timestamp.desc())
+    
+    # Limit to prevent huge exports (can be adjusted)
+    results = query.limit(100000).all()
+    
+    if format == "json":
+        return [
+            {
+                "id": row.id,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "occupied": row.occupied,
+                "spot_id": row.spot_id,
+                "spot_name": row.spot_name,
+                "location_id": str(row.location_id),
+                "location_name": row.location_name,
+                "camera_id": str(row.camera_id),
+                "camera_name": row.camera_name
+            }
+            for row in results
+        ]
+    
+    # CSV format
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "timestamp", "occupied", "spot_id", "spot_name", "location_id", "location_name", "camera_id", "camera_name"])
+    
+    for row in results:
+        writer.writerow([
+            row.id,
+            row.timestamp.isoformat() if row.timestamp else "",
+            row.occupied,
+            row.spot_id,
+            row.spot_name,
+            str(row.location_id),
+            row.location_name,
+            str(row.camera_id),
+            row.camera_name
+        ])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=observations_export.csv"}
+    )
+
+
+@app.get("/analytics/health")
+def export_health_history(
+    camera_id: Optional[uuid.UUID] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    format: str = "csv",
+    db: Session = Depends(get_db)
+):
+    """
+    Export camera health history for uptime analysis.
+    
+    Parameters:
+    - camera_id: Optional filter to a specific camera.
+    - start_date: Optional start of time range.
+    - end_date: Optional end of time range.
+    - format: 'csv' (default) or 'json'.
+    """
+    query = db.query(
+        HealthLog.id,
+        HealthLog.timestamp,
+        HealthLog.status,
+        HealthLog.message,
+        HealthLog.camera_id,
+        Camera.name.label('camera_name'),
+        Location.name.label('location_name')
+    ).join(Camera, HealthLog.camera_id == Camera.id)\
+     .outerjoin(Location, Camera.location_id == Location.id)
+    
+    if camera_id:
+        query = query.filter(HealthLog.camera_id == camera_id)
+    if start_date:
+        query = query.filter(HealthLog.timestamp >= start_date)
+    if end_date:
+        query = query.filter(HealthLog.timestamp <= end_date)
+    
+    query = query.order_by(HealthLog.timestamp.desc())
+    results = query.limit(50000).all()
+    
+    if format == "json":
+        return [
+            {
+                "id": row.id,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "status": row.status.value if row.status else None,
+                "message": row.message,
+                "camera_id": str(row.camera_id),
+                "camera_name": row.camera_name,
+                "location_name": row.location_name
+            }
+            for row in results
+        ]
+    
+    # CSV format
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "timestamp", "status", "message", "camera_id", "camera_name", "location_name"])
+    
+    for row in results:
+        writer.writerow([
+            row.id,
+            row.timestamp.isoformat() if row.timestamp else "",
+            row.status.value if row.status else "",
+            row.message or "",
+            str(row.camera_id),
+            row.camera_name,
+            row.location_name or ""
+        ])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=health_export.csv"}
+    )
 
 if __name__ == "__main__":
     import uvicorn

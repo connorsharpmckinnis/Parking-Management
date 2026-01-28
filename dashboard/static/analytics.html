@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeakPark | Analytics</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <!-- Sidebar Placeholder -->
+    <div id="sidebar-target"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="content-scrollable">
+            <div class="page-header">
+                <h1 class="page-title">Data Export</h1>
+                <p class="page-description">Export observation and health data for Power BI and external analysis</p>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div
+                style="display: flex; gap: 1rem; border-bottom: 2px solid var(--border); margin-bottom: 2rem; padding-bottom: 0.5rem;">
+                <button class="tab-link active" id="tab-btn-obs" onclick="switchAnalyticsTab('obs')"
+                    style="border: none; background: none; font-weight: 600; padding: 0.5rem 1rem;">
+                    <i data-lucide="file-spreadsheet"
+                        style="width: 16px; margin-right: 0.5rem; vertical-align: middle;"></i> Spot Observations
+                </button>
+                <button class="tab-link" id="tab-btn-health" onclick="switchAnalyticsTab('health')"
+                    style="border: none; background: none; font-weight: 600; padding: 0.5rem 1rem;">
+                    <i data-lucide="activity" style="width: 16px; margin-right: 0.5rem; vertical-align: middle;"></i>
+                    Camera Health
+                </button>
+            </div>
+
+            <div id="analytics-content">
+                <!-- Observations Export Container -->
+                <div id="section-obs" class="card" style="max-width: 900px;">
+                    <div class="card-header">
+                        <span class="card-title">Configure Observations Export</span>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 2rem;">
+                            Export a joined dataset of all spot occupancy observations. This includes physical spot
+                            names, location context, and specific camera identifiers.
+                        </p>
+
+                        <div class="dashboard-grid"
+                            style="margin-bottom: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem;">
+                            <div>
+                                <label class="form-label">Location Context</label>
+                                <select id="obs-location" class="form-select">
+                                    <option value="">All Monitored Locations</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Download Format</label>
+                                <select id="obs-format" class="form-select">
+                                    <option value="csv">CSV (Power BI / Excel)</option>
+                                    <option value="json">JSON (API / Web)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-grid"
+                            style="margin-bottom: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem;">
+                            <div>
+                                <label class="form-label">From Date/Time</label>
+                                <input type="datetime-local" id="obs-start" class="form-input">
+                            </div>
+                            <div>
+                                <label class="form-label">To Date/Time</label>
+                                <input type="datetime-local" id="obs-end" class="form-input">
+                            </div>
+                        </div>
+
+                        <div
+                            style="display: flex; gap: 1rem; align-items: center; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                            <button class="btn btn-primary" onclick="downloadObservations()"
+                                style="padding: 0.75rem 2rem;">
+                                <i data-lucide="download" style="width: 18px; margin-right: 0.5rem;"></i> Generate
+                                Export
+                            </button>
+                            <span class="text-muted" style="font-size: 0.8rem;">Large datasets (100k+ rows) may take
+                                several seconds to stream.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Health Export Container -->
+                <div id="section-health" class="card" style="display: none; max-width: 900px;">
+                    <div class="card-header">
+                        <span class="card-title">Configure Uptime & Health Export</span>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 2rem;">
+                            Export chronological health signals and status logs. Useful for calculating uptime SLAs and
+                            identifying intermittent hardware or network issues.
+                        </p>
+
+                        <div class="dashboard-grid"
+                            style="margin-bottom: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem;">
+                            <div>
+                                <label class="form-label">Specific Camera</label>
+                                <select id="health-camera" class="form-select">
+                                    <option value="">All Active Cameras</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Download Format</label>
+                                <select id="health-format" class="form-select">
+                                    <option value="csv">CSV (Power BI / Excel)</option>
+                                    <option value="json">JSON (API / Web)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-grid"
+                            style="margin-bottom: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem;">
+                            <div>
+                                <label class="form-label">From Date/Time</label>
+                                <input type="datetime-local" id="health-start" class="form-input">
+                            </div>
+                            <div>
+                                <label class="form-label">To Date/Time</label>
+                                <input type="datetime-local" id="health-end" class="form-input">
+                            </div>
+                        </div>
+
+                        <div
+                            style="display: flex; gap: 1rem; align-items: center; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                            <button class="btn btn-primary" onclick="downloadHealth()" style="padding: 0.75rem 2rem;">
+                                <i data-lucide="download" style="width: 18px; margin-right: 0.5rem;"></i> Generate
+                                Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="card" style="margin-top: 3rem; background: var(--secondary); border: none;">
+                <div class="card-content" style="padding: 1.5rem;">
+                    <div style="display: flex; align-items: flex-start; gap: 1rem;">
+                        <i data-lucide="code" style="width: 24px; color: var(--primary);"></i>
+                        <div>
+                            <h4 style="margin-bottom: 0.5rem;">Direct API Integration</h4>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
+                                Use these endpoints for persistent Power BI Web connections or automated reporting
+                                scripts.
+                            </p>
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <code
+                                    style="background: rgba(0,0,0,0.05); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem; border-left: 3px solid var(--primary);">
+                                    GET /analytics/observations?location_id=[UUID]&start_date=[ISO]&end_date=[ISO]&format=csv
+                                </code>
+                                <code
+                                    style="background: rgba(0,0,0,0.05); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem; border-left: 3px solid var(--primary);">
+                                    GET /analytics/health?camera_id=[UUID]&start_date=[ISO]&end_date=[ISO]&format=csv
+                                </code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container" class="toast-container"></div>
+    <script src="/static/js/shared.js"></script>
+    <script>
+        function switchAnalyticsTab(tabId) {
+            // Update buttons
+            document.querySelectorAll('.tab-link').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+            activeBtn.classList.add('active');
+
+            // Update content visibility
+            document.querySelectorAll('[id^="section-"]').forEach(sec => sec.style.display = 'none');
+            document.getElementById(`section-${tabId}`).style.display = 'block';
+        }
+
+        async function loadFilters() {
+            try {
+                const [locations, cameras] = await Promise.all([getLocations(), getCameras()]);
+
+                const locSelect = document.getElementById('obs-location');
+                locations.forEach(loc => {
+                    const opt = document.createElement('option');
+                    opt.value = loc.id;
+                    opt.textContent = loc.name;
+                    locSelect.appendChild(opt);
+                });
+
+                const camSelect = document.getElementById('health-camera');
+                cameras.forEach(cam => {
+                    const opt = document.createElement('option');
+                    opt.value = cam.id;
+                    opt.textContent = cam.name;
+                    camSelect.appendChild(opt);
+                });
+
+                // Set default dates (last 7 days)
+                const now = new Date();
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+                const formatLocal = (d) => d.toISOString().slice(0, 16);
+                document.getElementById('obs-end').value = formatLocal(now);
+                document.getElementById('obs-start').value = formatLocal(weekAgo);
+                document.getElementById('health-end').value = formatLocal(now);
+                document.getElementById('health-start').value = formatLocal(weekAgo);
+
+            } catch (e) {
+                console.error(e);
+                showToast('Failed to load filters', 'error');
+            }
+        }
+
+        function downloadObservations() {
+            const loc = document.getElementById('obs-location').value;
+            const format = document.getElementById('obs-format').value;
+            const start = document.getElementById('obs-start').value;
+            const end = document.getElementById('obs-end').value;
+
+            let url = `${CONTROL_PLANE_URL}/analytics/observations?format=${format}`;
+            if (loc) url += `&location_id=${loc}`;
+            if (start) url += `&start_date=${new Date(start).toISOString()}`;
+            if (end) url += `&end_date=${new Date(end).toISOString()}`;
+
+            window.open(url, '_blank');
+        }
+
+        function downloadHealth() {
+            const cam = document.getElementById('health-camera').value;
+            const format = document.getElementById('health-format').value;
+            const start = document.getElementById('health-start').value;
+            const end = document.getElementById('health-end').value;
+
+            let url = `${CONTROL_PLANE_URL}/analytics/health?format=${format}`;
+            if (cam) url += `&camera_id=${cam}`;
+            if (start) url += `&start_date=${new Date(start).toISOString()}`;
+            if (end) url += `&end_date=${new Date(end).toISOString()}`;
+
+            window.open(url, '_blank');
+        }
+
+        loadFilters();
+    </script>
+</body>
+
+</html>

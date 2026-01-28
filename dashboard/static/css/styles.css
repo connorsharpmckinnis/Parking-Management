@@ -70,6 +70,7 @@ body {
     flex-direction: column;
     border-right: 1px solid var(--sidebar-accent);
     flex-shrink: 0;
+    height: 100vh;
 }
 
 .sidebar-header {
@@ -105,9 +106,10 @@ body {
 
 .sidebar-nav {
     padding: 1rem;
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
     gap: 0.25rem;
 }
 
@@ -153,6 +155,25 @@ body {
     border-top: 1px solid var(--sidebar-accent);
     font-size: 0.75rem;
     color: var(--muted-foreground);
+    flex-shrink: 0;
+}
+
+/* Tab Navigation */
+.tab-link {
+    cursor: pointer;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent !important;
+}
+
+.tab-link:hover {
+    opacity: 1;
+}
+
+.tab-link.active {
+    opacity: 1;
+    color: var(--primary) !important;
+    border-bottom: 2px solid var(--primary) !important;
 }
 
 /* ============================================

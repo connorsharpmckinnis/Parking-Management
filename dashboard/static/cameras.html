@@ -14,33 +14,8 @@
 </head>
 
 <body>
-    <nav class="sidebar">
-        <div class="sidebar-header">
-            <div class="sidebar-logo-icon"><i data-lucide="camera"></i></div>
-            <div class="sidebar-brand">PeakPark<span>Occupancy Detection</span></div>
-        </div>
-        <div class="sidebar-nav">
-            <div class="nav-section-label">Overview</div>
-            <a href="index.html" class="nav-item"><i data-lucide="layout-dashboard"
-                    class="navbar-icon"></i>Dashboard</a>
-            <div class="nav-section-label">Management</div>
-            <a href="cameras.html" class="nav-item active"><i data-lucide="camera" class="navbar-icon"></i>Cameras</a>
-            <a href="monitor.html" class="nav-item"><i data-lucide="monitor-play" class="navbar-icon"></i>Live
-                Monitor</a>
-            <div class="nav-section-label">Analytics</div>
-            <a href="locations.html" class="nav-item"><i data-lucide="map-pin" class="navbar-icon"></i>Locations</a>
-            <a href="inspector.html" class="nav-item"><i data-lucide="database" class="navbar-icon"></i>Database</a>
-        </div>
-        <div class="sidebar-footer">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>v0.8.2</span>
-                <a href="#" class="text-muted"><i data-lucide="help-circle" style="width:14px;"></i></a>
-            </div>
-            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--muted-foreground); opacity: 0.6;">
-                Town of Apex IT Innovations
-            </div>
-        </div>
-    </nav>
+    <!-- Sidebar Placeholder -->
+    <div id="sidebar-target"></div>
 
     <main class="main-content">
         <div class="content-scrollable">
@@ -100,7 +75,6 @@
     <div id="toast-container" class="toast-container"></div>
     <script src="/static/js/shared.js"></script>
     <script>
-        lucide.createIcons();
         let locationsMap = {};
         let cams = [];
         let snapshots = {};
