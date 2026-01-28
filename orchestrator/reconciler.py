@@ -95,9 +95,11 @@ def start_worker(camera):
         "--name", container_name,
         "--restart", "unless-stopped",
         "--network", "parking-management_parking-net",
+        "--ipc", "host",
     ]
 
     if gpu_available():
+        cmd.extend(["--runtime", "nvidia"])
         cmd.extend(["--gpus", "all"])
         cmd.extend(["-e", "NVIDIA_VISIBLE_DEVICES=all"])
         print("GPU detected — starting worker with GPU support")
