@@ -43,6 +43,15 @@ The "Memory" and "Policy" store. We move away from SQLite and towards a robust S
 | `message` | TEXT | Error details ("RTSP timeout") |
 | `timestamp` | TIMESTAMP | |
 
+### Table: `spot_observations`
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | BIGINT (PK) | |
+| `spot_id` | VARCHAR (FK) | Prefixed ID (location:spot) |
+| `camera_id` | UUID (FK) | Reference to reporting camera |
+| `occupied` | BOOLEAN | |
+| `timestamp` | TIMESTAMP | |
+
 ## 🧪 Scenarios & Requirements
 
 ### Scenario A: Historical Analysis

@@ -1,34 +1,32 @@
 # Ingest Service
 
 ## 🛡️ Role
-The "Gatekeeper". A high-throughput buffer that sits between the wild internet/cameras and the pristine database. It ensures that the database is never overwhelmed and that bad data is rejected early.
-
-> **Note for Phase 1**: This logic will physically reside inside the `control_plane` container to simplify deployment, but it is architecturally distinct. We define it here to prepare for Phase 2 implementation.
+The "Gatekeeper". A high-throughput service that handles all incoming telemetry from Vision Workers. It validates data and persists it to the database, protecting the Control Plane from high-volume write traffic.
 
 ## 📋 Responsibilities
-1.  **Schema Validation**: Ensures incoming JSON payloads match the expected format (v1.0 telemetry).
-2.  **Authentication**: Verifies that the poster has a valid API token (or is an allowed container ID).
-3.  **Sanitization**: Normalizes timestamps to UTC.
-4.  **Writes**: Batches or directly inserts records into the `occupancy_events` table.
+1.  **Event Processing**: Receives occupancy counts and spot-level observations.
+2.  **Heartbeat Monitoring**: Tracks camera liveness and status tags (Healthy, Degraded, etc.).
+3.  **Spot Mapping**: Maps raw detections from workers to official `SpotObservation` records.
+4.  **Database Decoupling**: Ensures that high-frequency telemetry doesn't impact management API performance.
+
+## 🔌 API Contract
+
+### `POST /cameras/{id}/event`
+Receive occupancy counts and metadata.
+- **Body**: `{ "timestamp": "...", "occupied_count": X, "free_count": Y, "metadata_json": {...} }`
+
+### `POST /cameras/{id}/heartbeat`
+Receive health stayus update.
+- **Body**: `{ "status": "healthy", "message": "..." }`
 
 ## 🧪 Scenarios & Requirements
 
-### Scenario A: Data Spam
-**Requirement**: Protect the DB from a malfunctioning worker loop.
-1.  A worker glitched and is sending 100 requests per second.
-2.  Ingest Service detects rate limit violation (e.g., > 1 req/sec per Camera ID).
-3.  Ingest Service returns `429 Too Many Requests`.
-4.  Database is unaffected.
+### Scenario A: High-Frequency Scaling
+**Requirement**: Handle 100+ cameras heartbeating every 60s without latency.
+1.  Ingest Service uses asynchronous DB writes.
+2.  Control Plane metrics remain stable as it is not involved in this hot path.
 
-### Scenario B: Schema Evolution
-**Requirement**: Handle legacy agents.
-1.  Worker V1 sends payload `{ "cars": 5 }`.
-2.  Worker V2 sends payload `{ "occupied": 5, "trucks": 1 }`.
-3.  Ingest Service maps both to the canonical DB schema, filling defaults where necessary.
-
-### Scenario C: Database Outage
-**Requirement**: No data loss (start of queuing architecture).
-1.  Database connection fails.
-2.  Ingest Service cannot write.
-3.  (Edge/V2): Ingest Service buffers messages to Redis/Kafka.
-4.  (Phase 1): Ingest Service returns `503 Service Unavailable`, forcing the Worker to retry later.
+### Scenario B: Data Integrity
+**Requirement**: Only accept observations for spots that actually exist.
+1.  Ingest Service queries the `Spot` table for valid IDs in the camera's location.
+2.  Only validates and saves records matching known spot naming conventions.

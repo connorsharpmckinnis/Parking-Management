@@ -1,73 +1,46 @@
 # Control Plane Service
 
 ## 🧠 Role
-The "Brain" of the system. It is the authoritative source of truth for all camera configurations and the primary interface for system administrators. It **never** processes video frame data directly.
+The "Brain" and Authority. It manages camera configurations, locations, and the overall system state. It provides the REST API for the Dashboard and Orchestrator.
 
 ## 📋 Responsibilities
-1.  **Camera Registry**: centralized CRUD for camera metadata (IP, credentials, location, model config).
-2.  **State Management**: maintains the `desired_state` (Running/Stopped) for each camera.
-3.  **Telemetry Ingest** (Temporary): Acts as the HTTP receiver for events from `vision_worker` containers until the standalone Ingest Service is spun out.
-4.  **API Gateway**: Provides a REST API for the UI and CLI tools.
+1.  **System Authority**: Master registry for cameras, locations, and spots.
+2.  **Configuration API**: Serves desired state and computer vision parameters to the Orchestrator/Workers.
+3.  **Analytics Engine**: Joins historical occupancy data with location/spot metadata for reporting.
+4.  **Security**: Manages access to system-wide settings.
+
+## 🔌 API Contract Highlights
+
+### 📊 Analytics & Reporting
+
+#### `GET /analytics/observations`
+Export spot occupancy history with joined names (Location/Spot/Camera).
+- **Params**: `location_id`, `start_date`, `end_date`, `format` (csv/json).
+- **Usage**: Primary endpoint for Power BI dashboards.
+
+#### `GET /analytics/health`
+Export camera status and health log history.
+- **Params**: `camera_id`, `start_date`, `end_date`, `format` (csv/json).
+- **Usage**: Uptime auditing and reliability analysis.
+
+### 🎥 Camera Management
+
+#### `GET /cameras`
+Returns list of all registered cameras with computed statuses.
+
+#### `POST /cameras` / `PATCH /cameras/{id}`
+Manages camera metadata, `desired_state` (running/stopped), and vision geometry.
+
+### 📍 Location Management
+
+#### `GET /locations` / `POST /locations`
+Organizes cameras into logical areas (e.g., "Apex Town Hall").
+
+---
 
 ## 🛠 Tech Stack
--   **Language**: Python 3.11+
--   **Framework**: FastAPI
--   **Database**: PostgreSQL (via SQLAlchemy/AsyncPG) - *Uses SQLite for Dev/POC*
+- **Language**: Python 3.11+
+- **Framework**: FastAPI
+- **Database**: PostgreSQL (via SQLAlchemy)
 
-## 🔌 API Contract (Draft)
-
-### `GET /cameras`
-Returns list of all registered cameras.
-```json
-[
-  {
-    "id": "uuid",
-    "name": "North Lot Entrance",
-    "status": "healthy",
-    "desired_state": "running"
-  }
-]
-```
-
-### `POST /cameras`
-Register a new camera.
-**Body:**
-```json
-{
-  "name": "South Gate",
-  "connection_string": "rtsp://user:pass@10.0.0.5:554/stream",
-  "zone_config": { ...json_geometry... }
-}
-```
-
-### `POST /telemetry/{camera_id}`
-Endpoint for workers to push data.
-**Body:**
-```json
-{
-  "timestamp": "2024-01-01T12:00:00Z",
-  "occupancy": 5,
-  "confidence": 0.95
-}
-```
-
-## 🧪 Scenarios & Requirements
-
-### Scenario A: New Camera Installation
-**Requirement**: Admin must be able to register a camera without restarting the system.
-1.  Admin POSTs to `/cameras` with connection details.
-2.  System validates the RTSP string format (regex only, no connection attempt).
-3.  System saves record with `desired_state="stopped"` (default safety).
-4.  System returns `201 Created` with the new UUID.
-
-### Scenario B: Operator "Pauses" a Camera
-**Requirement**: Stop processing specific streams during maintenance.
-1.  Operator PATCHes `/cameras/{id}` setting `desired_state="stopped"`.
-2.  (Orchestrator will see this and kill the container - out of scope for Control Plane, but CP must persist the flag).
-
-### Scenario C: Worker Reporting
-**Requirement**: High-volume ingestion.
-1.  Worker POSTs occupancy data.
-2.  Control Plane validates `camera_id` exists.
-3.  Control Plane updates `last_contact` timestamp for that camera.
-4.  Control Plane forwards data to DB.
+> **Note**: Telemetry ingestion (heartbeats/events) has been migrated to the standalone `ingest_service` to maintain Control Plane responsiveness.
