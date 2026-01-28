@@ -6,6 +6,7 @@ import json
 
 # Configuration
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://control-plane:8000")
+INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://ingest-service:8001")
 RECONCILE_INTERVAL = int(os.getenv("RECONCILE_INTERVAL", "10"))
 WORKER_IMAGE = os.getenv("WORKER_IMAGE", "parking-vision-worker:latest")
 
@@ -72,22 +73,43 @@ def reconcile():
             print(f"Removing rogue container: {name}")
             stop_worker(name)
 
+def gpu_available():
+    try:
+        result = subprocess.run(
+            ["nvidia-smi"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
 def start_worker(camera):
     # Force remove any existing container with this name (crashed, legacy, etc)
     # to ensure we always start fresh with the latest image.
     container_name = f"parking-worker-{camera['id']}"
     subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
-    # Construct docker run command
-    # Windows Docker Desktop usually exposes docker.sock
     cmd = [
         "docker", "run", "-d",
-        "--name", f"parking-worker-{camera['id']}",
+        "--name", container_name,
         "--restart", "unless-stopped",
-        "--network", "parking-management_parking-net", # Connect to the compose network
+        "--network", "parking-management_parking-net",
+    ]
+
+    if gpu_available():
+        cmd.extend(["--gpus", "all"])
+        cmd.extend(["-e", "NVIDIA_VISIBLE_DEVICES=all"])
+        print("GPU detected — starting worker with GPU support")
+    else:
+        cmd.extend(["-e", "CUDA_VISIBLE_DEVICES="])
+        print("No GPU detected — starting worker in CPU mode")
+
+    cmd.extend([
         "-e", f"CAMERA_ID={camera['id']}",
         "-e", f"STREAM_URL={camera['stream_url']}",
-        "-e", f"API_ENDPOINT={CONTROL_PLANE_URL}",
+        "-e", f"API_ENDPOINT={INGEST_SERVICE_URL}",
+        "-e", f"CONFIG_ENDPOINT={CONTROL_PLANE_URL}",
         "-e", f"POLL_INTERVAL={camera['processing_interval_sec']}",
         "-e", f"ZONE_CONFIG={json.dumps(camera['geometry'])}",
         "-e", f"DETECTION_CLASSES={json.dumps(camera.get('detection_classes', [2, 3, 5, 7]))}",
@@ -96,7 +118,8 @@ def start_worker(camera):
         "-e", f"SAHI_TILE_SIZE={camera.get('sahi_tile_size', 640)}",
         "-e", f"SAHI_OVERLAP_RATIO={camera.get('sahi_overlap_ratio', 0.25)}",
         WORKER_IMAGE
-    ]
+    ])
+
     subprocess.run(cmd)
 
 def stop_worker(name):

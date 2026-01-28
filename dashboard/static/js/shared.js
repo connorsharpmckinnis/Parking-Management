@@ -167,6 +167,12 @@ async function getSpotHistory(spotId, limit = 50) {
     return await apiRequest(`/spots/${spotId}/history?limit=${limit}`);
 }
 
+async function deleteSpot(spotId) {
+    return await apiRequest(`/spots/${spotId}`, {
+        method: 'DELETE'
+    });
+}
+
 // ============================================
 // DOM Ready & Version Injection
 // ============================================

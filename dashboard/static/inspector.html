@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Database | SpotWatch</title>
+    <title>PeakPark | Database</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo-icon"><i data-lucide="camera"></i></div>
-            <div class="sidebar-brand">SpotWatch<span>Occupancy Detection</span></div>
+            <div class="sidebar-brand">PeakPark<span>Occupancy Detection</span></div>
         </div>
         <div class="sidebar-nav">
             <div class="nav-section-label">Overview</div>
@@ -336,13 +336,30 @@
                     </td>
                     <td class="text-muted">${formatTimestamp(s.last_update)}</td>
                     <td>
-                        <button class="btn btn-outline btn-sm" onclick="showHistory('${s.id}', '${escapeHtml(s.name)}')">
-                            <i data-lucide="history" style="width:14px; margin-right: 0.25rem;"></i> History
-                        </button>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-outline btn-sm" onclick="showHistory('${s.id}', '${escapeHtml(s.name)}')">
+                                <i data-lucide="history" style="width:14px; margin-right: 0.25rem;"></i> History
+                            </button>
+                            <button class="btn btn-outline btn-sm" style="border-color: var(--destructive); color: var(--destructive);" onclick="destroySpot('${s.id}', '${escapeHtml(s.name)}')">
+                                <i data-lucide="trash-2" style="width:14px;"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `).join('');
             lucide.createIcons();
+        }
+
+        async function destroySpot(id, name) {
+            if (confirm(`Delete spot "${name}" and all historical observations?`)) {
+                try {
+                    await deleteSpot(id);
+                    showToast(`Spot ${name} deleted`, 'success');
+                    loadData(); // Refresh everything
+                } catch (e) {
+                    showToast("Failed to delete spot: " + e.message, 'error');
+                }
+            }
         }
 
         function sortSpots(col) {

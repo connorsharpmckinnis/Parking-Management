@@ -20,7 +20,8 @@ class VisionWorker:
         # Configuration from Environment Variables
         self.camera_id = os.getenv("CAMERA_ID")
         self.stream_url = os.getenv("STREAM_URL")
-        self.api_endpoint = os.getenv("API_ENDPOINT") # http://control-plane:8000
+        self.api_endpoint = os.getenv("API_ENDPOINT")  # Telemetry: http://ingest-service:8001
+        self.config_endpoint = os.getenv("CONFIG_ENDPOINT", os.getenv("API_ENDPOINT"))  # Config: http://control-plane:8000
         self.interval = float(os.getenv("POLL_INTERVAL", "5.0"))
         self.model_path = os.getenv("MODEL_PATH", "yolo26x.pt")
         
@@ -52,6 +53,16 @@ class VisionWorker:
         # Initial config fetch
         self._fetch_remote_config()
 
+        self.device = self._get_device()
+        print(f"Using device: {self.device}")
+
+    def _get_device(self):
+        try:
+            import torch
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            return "cpu"
+
 
     def _parse_zones(self, zone_json):
         try:
@@ -73,11 +84,11 @@ class VisionWorker:
 
     def _fetch_remote_config(self):
         """Fetch latest geometry from Control Plane."""
-        if not self.api_endpoint or not self.camera_id:
+        if not self.config_endpoint or not self.camera_id:
             return
 
         try:
-            url = f"{self.api_endpoint}/cameras/{self.camera_id}"
+            url = f"{self.config_endpoint}/cameras/{self.camera_id}"
             resp = requests.get(url, timeout=3)
             if resp.status_code == 200:
                 data = resp.json()
@@ -124,7 +135,7 @@ class VisionWorker:
                     model_type='ultralytics',
                     model_path=self.model_path,
                     confidence_threshold=self.conf_threshold,
-                    device='cpu' # Assume CPU for container compatibility unless specified
+                    device=self.device
                 )
             except Exception as e:
                 print(f"Failed to load SAHI model: {e}")
@@ -132,6 +143,7 @@ class VisionWorker:
         
         if not self.use_sahi:
             model = YOLO(self.model_path)
+            model.to(self.device)
         
         last_report = 0
         last_config_check = 0

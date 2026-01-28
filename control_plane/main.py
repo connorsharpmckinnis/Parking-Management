@@ -188,25 +188,9 @@ def create_camera(camera_in: CameraCreate, db: Session = Depends(get_db)):
     
     return db_camera
 
-@app.post("/cameras/{camera_id}/heartbeat")
-def camera_heartbeat(camera_id: uuid.UUID, update: HealthUpdate, db: Session = Depends(get_db)):
-    db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
-    if not db_camera:
-        raise HTTPException(status_code=404, detail="Camera not found")
-    
-    # Update heartbeat time
-    db_camera.last_heartbeat = datetime.now(timezone.utc)
-    
-    # Logic: If worker reports error, save as error.
-    # If worker reports healthy/degraded, use that.
-    # If connection is fresh, it's healthy.
-    db_camera.status = update.status
-    
-    # Log health event
-    log = HealthLog(camera_id=camera_id, status=update.status, message=update.message)
-    db.add(log)
-    db.commit()
-    return {"status": "ok"}
+# NOTE: /cameras/{camera_id}/heartbeat and /cameras/{camera_id}/event
+# have been moved to the Ingest Service for scalability.
+# Vision Workers now POST to http://ingest-service:8001/cameras/{id}/event
 
 def _compute_status(camera: Camera) -> DeviceStatus:
     """Determine status based on heartbeat recency."""
@@ -235,48 +219,6 @@ def get_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
     
     return db_camera
 
-@app.post("/cameras/{camera_id}/event")
-def camera_event(camera_id: uuid.UUID, update: OccupancyUpdate, db: Session = Depends(get_db)):
-    db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
-    if not db_camera:
-        raise HTTPException(status_code=404, detail="Camera not found")
-    
-    # Update camera last event
-    db_camera.last_event_time = update.timestamp
-    
-    # Create event record
-    event = OccupancyEvent(
-        camera_id=camera_id,
-        timestamp=update.timestamp,
-        occupied_count=update.occupied_count,
-        free_count=update.free_count,
-        total_slots=update.total_slots,
-        metadata_json=update.metadata_json
-    )
-    db.add(event)
-    
-    # NEW: Populate spot_observations
-    # We only do this if the camera is linked to a location (referential integrity for Spots)
-    if db_camera.location_id and update.metadata_json and "spot_details" in update.metadata_json:
-        # Fetch existing spot IDs for this location to avoid FK violations.
-        # In a production environment, this could be optimized with a cache.
-        valid_spot_ids = {s[0] for s in db.query(Spot.id).filter(Spot.location_id == db_camera.location_id).all()}
-        
-        for spot in update.metadata_json["spot_details"]:
-            s_id = spot["spot_id"]
-            prefixed_id = f"{db_camera.location_id}:{s_id}"
-            if prefixed_id in valid_spot_ids:
-                obs = SpotObservation(
-                    spot_id=prefixed_id,
-                    camera_id=camera_id,
-                    occupied=bool(spot["occupied"]),
-                    timestamp=update.timestamp
-                )
-                db.add(obs)
-    
-    db.commit()
-    return {"received": True}
-
 @app.patch("/cameras/{camera_id}", response_model=CameraResponse)
 def update_camera(camera_id: uuid.UUID, camera_update: CameraUpdate, db: Session = Depends(get_db)):
     """Update camera settings or desired_state (start/stop)."""
@@ -304,12 +246,48 @@ def delete_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
     if not db_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # Delete related data first
+    location_id = db_camera.location_id
+
+    # 1. Delete transient data
     db.query(OccupancyEvent).filter(OccupancyEvent.camera_id == camera_id).delete()
     db.query(HealthLog).filter(HealthLog.camera_id == camera_id).delete()
     db.query(SpotObservation).filter(SpotObservation.camera_id == camera_id).delete()
     
+    # 2. Identify spots that were uniquely referenced by THIS camera in this location
+    if location_id and db_camera.geometry:
+        # Get all spots currently in this location
+        all_spots = db.query(Spot).filter(Spot.location_id == location_id).all()
+        
+        # Get all OTHER cameras in this location
+        other_cameras = db.query(Camera).filter(Camera.location_id == location_id, Camera.id != camera_id).all()
+        
+        # Build set of spot IDs covered by OTHER cameras
+        covered_by_others = set()
+        for oc in other_cameras:
+            if oc.geometry:
+                for zone in oc.geometry:
+                    covered_by_others.add(f"{location_id}:{zone.get('id')}")
+        
+        # If a spot isn't covered by others, we can safely prune it (or leave it if you want history)
+        # For PeakPark, let's prune orphaned spots to keep the UI clean as requested.
+        for spot in all_spots:
+            if spot.id not in covered_by_others:
+                db.query(SpotObservation).filter(SpotObservation.spot_id == spot.id).delete()
+                db.delete(spot)
+
     db.delete(db_camera)
+    db.commit()
+    return None
+
+@app.delete("/spots/{spot_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_spot(spot_id: str, db: Session = Depends(get_db)):
+    """Manually delete a spot and its history."""
+    db_spot = db.query(Spot).filter(Spot.id == spot_id).first()
+    if not db_spot:
+        raise HTTPException(status_code=404, detail="Spot not found")
+    
+    db.query(SpotObservation).filter(SpotObservation.spot_id == spot_id).delete()
+    db.delete(db_spot)
     db.commit()
     return None
 

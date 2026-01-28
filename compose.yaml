@@ -38,16 +38,17 @@ services:
       dockerfile: Dockerfile
     container_name: parking-ingest-service
     environment:
-      CONTROL_PLANE_URL: http://control-plane:8000
+      DATABASE_URL: postgresql://admin:password@db:5432/parking_db
     ports:
       - "8001:8001"
     depends_on:
-      - control-plane
+      - db
     networks:
       - parking-net
     volumes:
       # --- DEV VOLUMES: Remove for production ---
       - ./ingest_service:/app
+      - ./database:/app/database
       # ------------------------------------------
 
   dashboard:
@@ -90,9 +91,8 @@ services:
     build:
       context: ./vision_worker
       dockerfile: Dockerfile
-    deploy:
-      mode: replicated
-      replicas: 0 # We don't want Compose to start this, the Orchestrator does
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     networks:
       - parking-net
 
