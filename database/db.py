@@ -4,7 +4,7 @@ import os
 
 # Configuration from Environment
 # Defaulting to a local postgres if running in podman/network
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/parking_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:password@localhost:5432/parking_db")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
