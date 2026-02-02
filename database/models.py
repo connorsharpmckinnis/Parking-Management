@@ -44,7 +44,7 @@ class Camera(Base):
     stream_url = Column(String, nullable=False) # Store encrypted in production
     
     # Vision Config
-    model_version = Column(String, default="yolo11n")
+    model_version = Column(String, default="rtdetr-l.pt")
     processing_interval_sec = Column(Integer, default=60)
     geometry = Column(JSON, nullable=True) # Polygon zones
     detection_classes = Column(JSON, default=[2, 3, 5, 7]) # COCO classes: car, motorcycle, bus, truck

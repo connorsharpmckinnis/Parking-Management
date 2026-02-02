@@ -17,7 +17,7 @@ CREATE TABLE cameras (
     location_id UUID NOT NULL REFERENCES locations(id),
     connection_type connection_type DEFAULT 'fiber',
     stream_url TEXT NOT NULL,
-    model_version VARCHAR DEFAULT 'yolo11n',
+    model_version VARCHAR DEFAULT 'rtdetr-l.pt',
     processing_interval_sec INTEGER DEFAULT 5,
     geometry JSONB,
     detection_classes JSONB DEFAULT '[2, 3, 5, 7]',

@@ -5,7 +5,7 @@ import json
 import requests
 import threading
 from datetime import datetime, timezone
-from ultralytics import YOLO
+from ultralytics import YOLO, RTDETR
 import numpy as np
 import base64
 try:
@@ -23,7 +23,7 @@ class VisionWorker:
         self.api_endpoint = os.getenv("API_ENDPOINT")  # Telemetry: http://ingest-service:8001
         self.config_endpoint = os.getenv("CONFIG_ENDPOINT", os.getenv("API_ENDPOINT"))  # Config: http://control-plane:8000
         self.interval = float(os.getenv("POLL_INTERVAL", "5.0"))
-        self.model_path = os.getenv("MODEL_PATH", "yolo26x.pt")
+        self.model_path = os.getenv("MODEL_PATH", "rtdetr-l.pt")
         
         # Advanced Vision Config
         self.conf_threshold = float(os.getenv("DETECTION_CONFIDENCE", "0.25"))
@@ -142,7 +142,10 @@ class VisionWorker:
                 self.use_sahi = False
         
         if not self.use_sahi:
-            model = YOLO(self.model_path)
+            if self.model_path.startswith("rtdetr"):
+                model = RTDETR(self.model_path)
+            else:
+                model = YOLO(self.model_path)
             model.to(self.device)
         
         last_report = 0

@@ -119,6 +119,7 @@ def start_worker(camera):
         "-e", f"SAHI_ENABLED={str(camera.get('sahi_enabled', False)).lower()}",
         "-e", f"SAHI_TILE_SIZE={camera.get('sahi_tile_size', 640)}",
         "-e", f"SAHI_OVERLAP_RATIO={camera.get('sahi_overlap_ratio', 0.25)}",
+        "-e", f"MODEL_PATH={camera.get('model_version', 'rtdetr-l.pt')}",
         WORKER_IMAGE
     ])
 

@@ -1,6 +1,6 @@
 import cv2
 import argparse
-from ultralytics import YOLO
+from ultralytics import YOLO, RTDETR
 import math
 
 try:
@@ -82,7 +82,8 @@ def main():
 
     for model_path in args.models:
         print(f"Running inference with {model_path}...")
-        model = YOLO(model_path)
+        
+        
 
         if args.sahi:
             if not SAHI_AVAILABLE:
@@ -117,6 +118,12 @@ def main():
             count = len(result.object_prediction_list)
 
         else:
+            # define model with RT-DETR if that's hte model, otherwise it'll be YOLO
+            if model_path.startswith("rtdetr"):
+                model = RTDETR(model_path)
+            else:
+                model = YOLO(model_path)
+                
             results = model.predict(
                 source=image,
                 conf=args.conf,

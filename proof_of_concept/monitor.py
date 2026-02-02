@@ -7,7 +7,7 @@ import db
 from ultralytics import YOLO
 
 class ParkingMonitor:
-    def __init__(self, stream_url, model_path="yolo11n.pt", json_path="bounding_boxes.json", interval=5):
+    def __init__(self, stream_url, model_path="rtdetr-l.pt", json_path="bounding_boxes.json", interval=5):
         self.stream_url = stream_url
         self.model_path = model_path
         self.json_path = json_path
