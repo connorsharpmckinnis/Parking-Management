@@ -110,9 +110,45 @@ services:
     networks:
       - parking-net
 
+  mqtt-broker:
+    build: ./mqtt_broker
+    container_name: parking-mqtt-broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - mqtt_data:/mosquitto/data
+      - mqtt_log:/mosquitto/log
+    networks:
+      - parking-net
+
+  edge-simulator:
+    build: ./edge_processing
+    container_name: parking-edge-simulator
+    environment:
+      MQTT_BROKER: mqtt-broker
+      UPDATE_INTERVAL: 15
+    depends_on:
+      - mqtt-broker
+    networks:
+      - parking-net
+
+  ingest-bridge:
+    build: ./ingest_bridge
+    container_name: parking-ingest-bridge
+    environment:
+      MQTT_BROKER: mqtt-broker
+      INGEST_SERVICE_URL: http://ingest-service:8001
+    depends_on:
+      - mqtt-broker
+      - ingest-service
+    networks:
+      - parking-net
+
 networks:
   parking-net:
     driver: bridge
 
 volumes:
   parking_data:
+  mqtt_data:
+  mqtt_log:
