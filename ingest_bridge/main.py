@@ -3,6 +3,8 @@ import json
 import time
 import requests
 import paho.mqtt.client as mqtt
+import logging
+import signal
 from datetime import datetime
 
 # Configuration
@@ -10,16 +12,29 @@ MQTT_BROKER = os.getenv("MQTT_BROKER", "mqtt-broker")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://ingest-service:8001")
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger("ingest-bridge")
+
+# Global flag for graceful shutdown
+running = True
+
+def signal_handler(signum, frame):
+    global running
+    logger.info("Signal received, stopping...")
+    running = False
+
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
-        print(f"Connected to MQTT Broker: {MQTT_BROKER}")
-        # Subscribe to all camera topics
-        # parking/camera/{id}/event
-        # parking/camera/{id}/heartbeat
+        logger.info(f"Connected to MQTT Broker: {MQTT_BROKER}")
         client.subscribe("parking/camera/+/+")
-        print("Subscribed to parking/camera/+/+")
+        logger.info("Subscribed to parking/camera/+/+")
     else:
-        print(f"Failed to connect, return code {rc}")
+        logger.error(f"Failed to connect, return code {rc}")
 
 def on_message(client, userdata, msg):
     try:
@@ -32,36 +47,56 @@ def on_message(client, userdata, msg):
         
         payload = json.loads(msg.payload.decode())
         
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Received {msg_type} for {camera_id}")
+        logger.info(f"Received {msg_type} for {camera_id}")
         
         # Forward to Ingest Service
         endpoint = f"{INGEST_SERVICE_URL}/cameras/{camera_id}/{msg_type}"
-        response = requests.post(endpoint, json=payload, timeout=5)
-        
-        if response.status_code == 200:
-            print(f"  → Successfully forwarded to Ingest Service")
-        else:
-            print(f"  → Failed to forward: {response.status_code} - {response.text}")
+        try:
+            response = requests.post(endpoint, json=payload, timeout=5)
+            if response.status_code == 200:
+                logger.info(f"  → Successfully forwarded to Ingest Service")
+            else:
+                logger.warning(f"  → Failed to forward: {response.status_code} - {response.text}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"  → Connection error to Ingest Service: {e}")
 
     except Exception as e:
-        print(f"Error processing message: {e}")
+        logger.error(f"Error processing message: {e}")
 
 def main():
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect
     client.on_message = on_message
 
-    print(f"Starting bridge. Connecting to {MQTT_BROKER}...")
+    logger.info(f"Starting bridge. Connecting to {MQTT_BROKER}...")
     
-    while True:
+    connected = False
+    while running and not connected:
         try:
             client.connect(MQTT_BROKER, MQTT_PORT, 60)
-            break
+            connected = True
         except Exception as e:
-            print(f"Connection failed ({e}), retrying in 5s...")
-            time.sleep(5)
+            logger.error(f"Connection failed ({e}), retrying in 5s...")
+            # Check 'running' flag during retry sleep
+            for _ in range(5):
+                if not running:
+                    break
+                time.sleep(1)
 
-    client.loop_forever()
+    if connected:
+        client.loop_start()
+        while running:
+            time.sleep(1)
+        
+        logger.info("Cleaning up...")
+        client.loop_stop()
+        client.disconnect()
+        logger.info("Stopped.")
 
 if __name__ == "__main__":
     main()
+

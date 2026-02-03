@@ -10,6 +10,12 @@ services:
       - "5432:5432"
     volumes:
       - parking_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d parking_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
     networks:
       - parking-net
 
@@ -23,7 +29,9 @@ services:
     ports:
       - "8002:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - parking-net
     volumes:
@@ -42,7 +50,14 @@ services:
     ports:
       - "8003:8001"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
     networks:
       - parking-net
     volumes:
@@ -60,6 +75,7 @@ services:
       CONTROL_PLANE_URL: http://control-plane:8000
     depends_on:
       - control-plane
+    restart: unless-stopped
     networks:
       - parking-net
     volumes:
@@ -90,6 +106,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - control-plane
+    restart: unless-stopped
     networks:
       - parking-net
 
@@ -118,6 +135,12 @@ services:
     volumes:
       - mqtt_data:/mosquitto/data
       - mqtt_log:/mosquitto/log
+    healthcheck:
+      test: [ "CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
     networks:
       - parking-net
 
@@ -128,7 +151,9 @@ services:
       MQTT_BROKER: mqtt-broker
       UPDATE_INTERVAL: 15
     depends_on:
-      - mqtt-broker
+      mqtt-broker:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - parking-net
 
@@ -139,8 +164,11 @@ services:
       MQTT_BROKER: mqtt-broker
       INGEST_SERVICE_URL: http://ingest-service:8001
     depends_on:
-      - mqtt-broker
-      - ingest-service
+      mqtt-broker:
+        condition: service_healthy
+      ingest-service:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - parking-net
 
