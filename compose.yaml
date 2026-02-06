@@ -27,23 +27,26 @@ services:
     environment:
       DATABASE_URL: postgresql://admin:password@db:5432/parking_db
     ports:
-      - "8002:8000"
+      - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--output-document=/dev/null", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     networks:
       - parking-net
     volumes:
-      # --- DEV VOLUMES: Remove for production ---
       - ./control_plane:/app/control_plane
       - ./database:/app/database
-      # ------------------------------------------
 
   ingest-service:
     build:
-      context: ./ingest_service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ingest_service/Dockerfile
     container_name: parking-ingest-service
     environment:
       DATABASE_URL: postgresql://admin:password@db:5432/parking_db
@@ -53,7 +56,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8001/health" ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--output-document=/dev/null", "http://localhost:8001/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -61,13 +64,13 @@ services:
     networks:
       - parking-net
     volumes:
-      # --- DEV VOLUMES: Remove for production ---
-      - ./ingest_service:/app
+      - ./ingest_service:/app/ingest_service
       - ./database:/app/database
-      # ------------------------------------------
 
   dashboard:
-    build: ./dashboard
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
     container_name: parking-dashboard
     ports:
       - "8501:8501"
@@ -79,98 +82,97 @@ services:
     networks:
       - parking-net
     volumes:
-      # --- DEV VOLUMES: Remove for production ---
       - ./dashboard:/app
-      # ------------------------------------------
 
   orchestrator:
     build:
-      context: ./orchestrator
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: orchestrator/Dockerfile
     container_name: parking-orchestrator
     environment:
       CONTROL_PLANE_URL: http://control-plane:8000
+      INGEST_SERVICE_URL: http://ingest-service:8001
       WORKER_IMAGE: parking-vision-worker:latest
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [ gpu ]
+      # --- DEV CONFIG ---
+      FORCE_CPU: "true"
+      DOCKER_NETWORK: parking-management_parking-net
+      # This mount tells the orchestrator where the vision_worker code is on the HOST
+      # so it can volume-mount it into the worker containers it starts.
+      MOUNT_WORKER_CODE: ${PWD}/vision_worker
+      # ------------------
     volumes:
-      # --- DEV VOLUMES: Remove for production ---
-      - ./orchestrator:/app
-      # ------------------------------------------
-      # Access to Docker socket (Windows Docker Desktop usually puts it here or at //var/run/docker.sock)
+      - ./orchestrator:/app/orchestrator
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - control-plane
+      - ingest-service
     restart: unless-stopped
     networks:
       - parking-net
 
   vision-worker:
-    image: parking-vision-worker:latest
+    # This service is primarily for building the image used by the orchestrator.
+    # It does not need to run as a separate service.
     build:
-      context: ./vision_worker
-      dockerfile: Dockerfile
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [ gpu ]
+      context: .
+      dockerfile: vision_worker/Dockerfile
+    image: parking-vision-worker:latest
+    container_name: parking-vision-worker-builder
+    command: [ "echo", "Vision worker image built!" ]
+    profiles: [ "build-only" ]
     networks:
       - parking-net
+  # mqtt-broker:
+  #   build: ./mqtt_broker
+  #   dockerfile: Dockerfile
+  #   container_name: parking-mqtt-broker
+  #   ports:
+  #     - "1883:1883"
+  #   volumes:
+  #     - mqtt_data:/mosquitto/data
+  #     - mqtt_log:/mosquitto/log
+  #   healthcheck:
+  #     test: [ "CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1" ]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - parking-net
 
-  mqtt-broker:
-    build: ./mqtt_broker
-    container_name: parking-mqtt-broker
-    ports:
-      - "1883:1883"
-    volumes:
-      - mqtt_data:/mosquitto/data
-      - mqtt_log:/mosquitto/log
-    healthcheck:
-      test: [ "CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - parking-net
+  # edge-simulator:
+  #   build: ./edge_processing
+  #   dockerfile: Dockerfile
+  #   container_name: parking-edge-simulator
+  #   environment:
+  #     MQTT_BROKER: mqtt-broker
+  #     UPDATE_INTERVAL: 15
+  #   depends_on:
+  #     mqtt-broker:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   networks:
+  #     - parking-net
+  #   volumes:
+  #     - ./edge_processing:/app
 
-  edge-simulator:
-    build: ./edge_processing
-    container_name: parking-edge-simulator
-    environment:
-      MQTT_BROKER: mqtt-broker
-      UPDATE_INTERVAL: 15
-    depends_on:
-      mqtt-broker:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - parking-net
-
-  ingest-bridge:
-    build: ./ingest_bridge
-    container_name: parking-ingest-bridge
-    environment:
-      MQTT_BROKER: mqtt-broker
-      INGEST_SERVICE_URL: http://ingest-service:8001
-    depends_on:
-      mqtt-broker:
-        condition: service_healthy
-      ingest-service:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - parking-net
+  # ingest-bridge:
+  #   build: ./ingest_bridge
+  #   dockerfile: Dockerfile
+  #   container_name: parking-ingest-bridge
+  #   environment:
+  #     MQTT_BROKER: mqtt-broker
+  #     INGEST_SERVICE_URL: http://ingest-service:8001
+  #   depends_on:
+  #     mqtt-broker:
+  #       condition: service_healthy
+  #     ingest-service:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   networks:
+  #     - parking-net
+  #   volumes:
+  #     - ./ingest_bridge:/app
 
 networks:
   parking-net:
@@ -178,5 +180,5 @@ networks:
 
 volumes:
   parking_data:
-  mqtt_data:
-  mqtt_log:
+    # mqtt_data:
+    # mqtt_log:

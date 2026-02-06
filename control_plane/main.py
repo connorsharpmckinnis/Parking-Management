@@ -23,11 +23,31 @@ from control_plane.schemas import (
     LocationCreate, LocationResponse, SpotResponse
 )
 
-# Initialize database tables
-Base.metadata.create_all(bind=engine)
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Camera Control Plane")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database tables
+    print(f"Connecting to database at {engine.url.render_as_string(hide_password=True)}...")
+    try:
+        # Check connection
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print("Database connection successful.")
+        
+        # Create tables
+        Base.metadata.create_all(bind=engine)
+        print("Database tables initialized successfully.")
+    except Exception as e:
+        print(f"DATABASE INITIALIZATION ERROR: {e}")
+        # We don't exit here because the app might still be useful for health checks
+        # but most endpoints will fail.
+    
+    yield
 
+app = FastAPI(title="Camera Control Plane", lifespan=lifespan)
+ 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Allow all for local dev
@@ -40,6 +60,11 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"message": "Parking Management Control Plane Active"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
 
 # --- Locations ---
 

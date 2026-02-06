@@ -125,6 +125,28 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Occupancy Logic Settings -->
+                            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border);">
+                                <label class="form-label" style="color: var(--accent);">Occupancy Detection
+                                    Settings</label>
+                                <div class="dashboard-grid">
+                                    <div>
+                                        <label class="form-label">Bottom % of BBox</label>
+                                        <input type="number" class="form-input" id="occupancy-bottom-pct" value="33"
+                                            step="5" min="10" max="100">
+                                        <small style="color: var(--muted-foreground);">Uses bottom N% of detection for
+                                            overlap</small>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Min Overlap Threshold %</label>
+                                        <input type="number" class="form-input" id="occupancy-min-overlap" value="30"
+                                            step="5" min="10" max="100">
+                                        <small style="color: var(--muted-foreground);">Minimum overlap to mark space
+                                            occupied</small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <button class="btn btn-primary" id="capture-btn" onclick="captureFrameFromStream()">
@@ -332,7 +354,9 @@
                 processing_interval_sec: parseInt(document.getElementById('poll-interval').value) || 60,
                 sahi_enabled: document.getElementById('sahi-toggle').checked,
                 sahi_tile_size: parseInt(document.getElementById('sahi-tile-size').value) || 640,
-                sahi_overlap_ratio: parseFloat(document.getElementById('sahi-overlap').value) || 0.25
+                sahi_overlap_ratio: parseFloat(document.getElementById('sahi-overlap').value) || 0.25,
+                occupancy_bottom_pct: (parseInt(document.getElementById('occupancy-bottom-pct').value) || 33) / 100.0,
+                occupancy_min_overlap: (parseInt(document.getElementById('occupancy-min-overlap').value) || 30) / 100.0
             };
 
             try { await createCamera(payload); showToast('Registered!', 'success'); setTimeout(() => window.location.href = 'index.html', 1500); }

@@ -17,24 +17,33 @@ app = FastAPI(title="Parking Dashboard")
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_api(path: str, request: Request):
     """Proxy all /api/* requests to the Control Plane."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        url = f"{CONTROL_PLANE_URL}/{path}"
-        
-        # Forward query params
-        if request.query_params:
-            url += f"?{request.query_params}"
-        
+    # Ensure no double slashes and no missing slashes
+    target_path = path if not path.startswith("/") else path[1:]
+    url = f"{CONTROL_PLANE_URL.rstrip('/')}/{target_path}"
+    
+    # Forward query params
+    if request.query_params:
+        url += f"?{request.query_params}"
+    
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         # Forward request body for non-GET methods
         body = None
-        if request.method in ["POST", "PUT", "PATCH"]:
+        if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
             body = await request.body()
         
         try:
+            # Prepare headers - forward content type and auth if present
+            headers = {}
+            if request.headers.get("content-type"):
+                headers["Content-Type"] = request.headers.get("content-type")
+            if request.headers.get("authorization"):
+                headers["Authorization"] = request.headers.get("authorization")
+
             response = await client.request(
                 method=request.method,
                 url=url,
                 content=body,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
             
             return Response(
@@ -43,6 +52,7 @@ async def proxy_api(path: str, request: Request):
                 headers={"Content-Type": response.headers.get("content-type", "application/json")}
             )
         except httpx.RequestError as e:
+            print(f"Proxy Error: {str(e)} for URL {url}")
             raise HTTPException(status_code=502, detail=f"Control Plane unavailable: {str(e)}")
 
 # Serve pages at root for clean URLs

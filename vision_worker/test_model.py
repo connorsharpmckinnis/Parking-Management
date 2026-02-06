@@ -2,6 +2,7 @@ import cv2
 import argparse
 from ultralytics import YOLO, RTDETR
 import math
+import numpy as np
 
 try:
     from sahi import AutoDetectionModel
@@ -111,9 +112,17 @@ def main():
                 if args.classes is not None and obj.category.id not in args.classes:
                     continue
 
-                bbox = obj.bbox
-                x1, y1, x2, y2 = map(int, [bbox.minx, bbox.miny, bbox.maxx, bbox.maxy])
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                if "-seg" in model_path and hasattr(obj, 'mask') and obj.mask is not None:
+                    # Draw polygon for SAHI if mask is available
+                    # SAHI's mask.full_mask is a binary mask of the whole image
+                    # We can find contours to draw the polygon
+                    mask = obj.mask.full_mask
+                    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    cv2.drawContours(annotated, contours, -1, (0, 255, 0), 2)
+                else:
+                    bbox = obj.bbox
+                    x1, y1, x2, y2 = map(int, [bbox.minx, bbox.miny, bbox.maxx, bbox.maxy])
+                    cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
             count = len(result.object_prediction_list)
 
@@ -132,8 +141,14 @@ def main():
                 verbose=False
             )
 
-            annotated = results[0].plot(line_width=1, font_size=12)
-            count = len(results[0].boxes)
+            res = results[0]
+            if "-seg" in model_path and res.masks is not None:
+                # Use plot with boxes=False to show only the segmentation polygons/masks
+                annotated = res.plot(line_width=1, font_size=12, boxes=False)
+                count = len(res.masks)
+            else:
+                annotated = res.plot(line_width=1, font_size=12)
+                count = len(res.boxes)
 
         label = model_path
         if args.sahi:

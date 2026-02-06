@@ -9,6 +9,9 @@ CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://control-plane:8000")
 INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://ingest-service:8001")
 RECONCILE_INTERVAL = int(os.getenv("RECONCILE_INTERVAL", "10"))
 WORKER_IMAGE = os.getenv("WORKER_IMAGE", "parking-vision-worker:latest")
+FORCE_CPU = os.getenv("FORCE_CPU", "false").lower() == "true"
+MOUNT_WORKER_CODE = os.getenv("MOUNT_WORKER_CODE") # Optional: host path to vision_worker for dev
+DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "parking-management_parking-net")
 
 def get_desired_state():
     try:
@@ -74,6 +77,8 @@ def reconcile():
             stop_worker(name)
 
 def gpu_available():
+    if FORCE_CPU:
+        return False
     try:
         result = subprocess.run(
             ["nvidia-smi"],
@@ -81,7 +86,7 @@ def gpu_available():
             stderr=subprocess.DEVNULL
         )
         return result.returncode == 0
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.SubprocessError):
         return False
 
 def start_worker(camera):
@@ -94,7 +99,7 @@ def start_worker(camera):
         "docker", "run", "-d",
         "--name", container_name,
         "--restart", "unless-stopped",
-        "--network", "parking-management_parking-net",
+        "--network", DOCKER_NETWORK,
         "--ipc", "host",
     ]
 
@@ -102,10 +107,15 @@ def start_worker(camera):
         cmd.extend(["--runtime", "nvidia"])
         cmd.extend(["--gpus", "all"])
         cmd.extend(["-e", "NVIDIA_VISIBLE_DEVICES=all"])
-        print("GPU detected — starting worker with GPU support")
+        print(f"[{time.ctime()}] GPU detected — starting worker with GPU support")
     else:
         cmd.extend(["-e", "CUDA_VISIBLE_DEVICES="])
-        print("No GPU detected — starting worker in CPU mode")
+        print(f"[{time.ctime()}] GPU disabled/not found — starting worker in CPU mode")
+
+    if MOUNT_WORKER_CODE:
+        # Note: MOUNT_WORKER_CODE should be an absolute path from the HOST perspective
+        cmd.extend(["-v", f"{MOUNT_WORKER_CODE}:/app"])
+        print(f"[{time.ctime()}] Mounting worker code from: {MOUNT_WORKER_CODE}")
 
     cmd.extend([
         "-e", f"CAMERA_ID={camera['id']}",
@@ -119,6 +129,8 @@ def start_worker(camera):
         "-e", f"SAHI_ENABLED={str(camera.get('sahi_enabled', False)).lower()}",
         "-e", f"SAHI_TILE_SIZE={camera.get('sahi_tile_size', 640)}",
         "-e", f"SAHI_OVERLAP_RATIO={camera.get('sahi_overlap_ratio', 0.25)}",
+        "-e", f"OCCUPANCY_BOTTOM_PCT={camera.get('occupancy_bottom_pct', 0.33)}",
+        "-e", f"OCCUPANCY_MIN_OVERLAP={camera.get('occupancy_min_overlap', 0.30)}",
         "-e", f"MODEL_PATH={camera.get('model_version', 'rtdetr-l.pt')}",
         WORKER_IMAGE
     ])

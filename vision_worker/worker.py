@@ -31,6 +31,10 @@ class VisionWorker:
         self.sahi_tile_size = int(os.getenv("SAHI_TILE_SIZE", "640"))
         self.sahi_overlap_ratio = float(os.getenv("SAHI_OVERLAP_RATIO", "0.25"))
         
+        # Sub-BBox Occupancy Logic Config
+        self.occupancy_bottom_pct = float(os.getenv("OCCUPANCY_BOTTOM_PCT", "0.33"))
+        self.occupancy_min_overlap = float(os.getenv("OCCUPANCY_MIN_OVERLAP", "0.30"))
+        
         if self.use_sahi and not SAHI_AVAILABLE:
             print("WARNING: SAHI enabled but not installed. Falling back to standard YOLO.")
             self.use_sahi = False
@@ -126,7 +130,7 @@ class VisionWorker:
 
     def _process_loop(self):
         print(f"Worker for {self.camera_id} starting...")
-        
+        print(f"Worker initiatlized using model {self.model_path}")
         model = None
         if self.use_sahi:
             print(f"Initializing SAHI model (tile={self.sahi_tile_size}, overlap={self.sahi_overlap_ratio})...")
@@ -214,29 +218,61 @@ class VisionWorker:
                         cls = box.cls[0].cpu().numpy()
                         detections.append([int(x1), int(y1), int(x2), int(y2), float(conf), int(cls)])
 
-            # Occupancy Logic (Bottom-Center)
+            # Occupancy Logic (Sub-BBox Overlap)
+            # For each detection, create a sub-bbox (bottom X%) and find the best overlapping zone.
+            # A detection is assigned to the zone with the highest overlap if it exceeds min_overlap.
+            
+            # Track which zones are occupied (zone_id -> True)
+            zone_occupancy = {zone["id"]: False for zone in self.polygons}
+            
+            for det in detections:
+                x1, y1, x2, y2, conf, cls = det
+                
+                # Create sub-bbox (bottom X% of the detection)
+                bbox_height = y2 - y1
+                sub_y1 = int(y2 - bbox_height * self.occupancy_bottom_pct)
+                sub_bbox_pts = np.array([
+                    [x1, sub_y1],
+                    [x2, sub_y1],
+                    [x2, y2],
+                    [x1, y2]
+                ], np.int32)
+                
+                # Draw sub-bbox in magenta
+                cv2.polylines(annotated_frame, [sub_bbox_pts], True, (255, 0, 255), 2)
+                
+                # Calculate sub-bbox area
+                sub_bbox_area = (x2 - x1) * (y2 - sub_y1)
+                if sub_bbox_area <= 0:
+                    continue
+                
+                # Find the zone with the best overlap
+                best_zone_id = None
+                best_overlap_ratio = 0.0
+                
+                for zone in self.polygons:
+                    zone_poly = zone["poly"].reshape(-1, 2)
+                    
+                    # Calculate intersection using cv2.intersectConvexConvex
+                    ret, intersection_pts = cv2.intersectConvexConvex(sub_bbox_pts.astype(np.float32), zone_poly.astype(np.float32))
+                    
+                    if ret > 0 and intersection_pts is not None and len(intersection_pts) > 0:
+                        intersection_area = cv2.contourArea(intersection_pts)
+                        overlap_ratio = intersection_area / sub_bbox_area
+                        
+                        if overlap_ratio > best_overlap_ratio:
+                            best_overlap_ratio = overlap_ratio
+                            best_zone_id = zone["id"]
+                
+                # Assign detection to zone if overlap exceeds threshold
+                if best_zone_id and best_overlap_ratio >= self.occupancy_min_overlap:
+                    zone_occupancy[best_zone_id] = True
+            
+            # Build spot_results from zone_occupancy map
             for zone in self.polygons:
                 poly = zone["poly"]
                 spot_id = zone["id"]
-                is_occupied = False
-                
-                for det in detections:
-                    x1, y1, x2, y2, conf, cls = det
-                    # Bottom-center point
-                    bx = int((x1 + x2) / 2)
-                    by = int(y2)
-
-                    cv2.circle(
-                        annotated_frame,
-                        (bx, by),
-                        radius=7,              # visible, not subtle
-                        color=(255, 0, 255),     # yellow (BGR)
-                        thickness=-1           # filled circle
-                    )
-                    
-                    if cv2.pointPolygonTest(poly, (bx, by), False) >= 0:
-                        is_occupied = True
-                        break
+                is_occupied = zone_occupancy.get(spot_id, False)
                 
                 spot_results.append({
                     "spot_id": spot_id,

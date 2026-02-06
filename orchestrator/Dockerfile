@@ -8,9 +8,11 @@ RUN apt-get update && apt-get install -y \
     docker.io \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY orchestrator/requirements.txt ./orchestrator/
+RUN pip install --no-cache-dir -r orchestrator/requirements.txt
 
-COPY . .
+COPY orchestrator/ ./orchestrator/
 
-CMD ["python", "reconciler.py"]
+WORKDIR /app/orchestrator
+
+CMD ["python", "-u", "reconciler.py"]

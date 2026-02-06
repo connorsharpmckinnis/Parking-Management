@@ -3,8 +3,8 @@
  * Town of Apex | v0.8.2
  */
 
-const APP_VERSION = '0.8.2';
-const CONTROL_PLANE_URL = 'http://localhost:8000'; // Direct access for local dev
+const APP_VERSION = '0.8.3';
+const CONTROL_PLANE_URL = '/api'; // Use internal proxy to avoid CORS and port mismatches
 
 // ============================================
 // Utility Functions

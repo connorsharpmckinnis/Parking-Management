@@ -55,6 +55,10 @@ class Camera(Base):
     sahi_tile_size = Column(Integer, default=640)
     sahi_overlap_ratio = Column(Float, default=0.25)
     
+    # Sub-BBox Occupancy Logic
+    occupancy_bottom_pct = Column(Float, default=0.33)  # Bottom 33% of bbox used for overlap
+    occupancy_min_overlap = Column(Float, default=0.30)  # Minimum 30% overlap to count as occupied
+    
     # State
     desired_state = Column(Enum(DesiredState), default=DesiredState.STOPPED)
     last_heartbeat = Column(DateTime(timezone=True), nullable=True)
@@ -63,6 +67,7 @@ class Camera(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_deleted = Column(Boolean, default=False)
 
     location_ref = relationship("Location", back_populates="cameras")
     events = relationship("OccupancyEvent", back_populates="camera")

@@ -1,0 +1,165 @@
+# Production Docker Compose - Parking Management System
+#
+# Usage on production server:
+#   docker compose -f compose.prod.yaml pull
+#   docker compose -f compose.prod.yaml up -d
+#
+# IMPORTANT: Replace 'YOUR_DOCKERHUB_USERNAME' with your actual DockerHub username/org
+# before using this file. Use find-and-replace across the file.
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: parking-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: parking_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - parking_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d parking_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  control-plane:
+    image: connorsharpmckinnis/peakpark-control-plane:latest
+    container_name: parking-control-plane
+    environment:
+      DATABASE_URL: postgresql://admin:password@db:5432/parking_db
+    ports:
+      - "8002:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  ingest-service:
+    image: connorsharpmckinnis/peakpark-ingest-service:latest
+    container_name: parking-ingest-service
+    environment:
+      DATABASE_URL: postgresql://admin:password@db:5432/parking_db
+    ports:
+      - "8003:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  dashboard:
+    image: connorsharpmckinnis/peakpark-dashboard:latest
+    container_name: parking-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8000
+    depends_on:
+      - control-plane
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  orchestrator:
+    image: connorsharpmckinnis/peakpark-orchestrator:latest
+    container_name: parking-orchestrator
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8000
+      WORKER_IMAGE: connorsharpmckinnis/peakpark-vision-worker:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    volumes:
+      # Docker socket access required for orchestrator to manage worker containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - control-plane
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  vision-worker:
+    image: connorsharpmckinnis/peakpark-vision-worker:latest
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    networks:
+      - parking-net
+
+  mqtt-broker:
+    image: connorsharpmckinnis/peakpark-mqtt-broker:latest
+    container_name: parking-mqtt-broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - mqtt_data:/mosquitto/data
+      - mqtt_log:/mosquitto/log
+    healthcheck:
+      test: [ "CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  edge-simulator:
+    image: connorsharpmckinnis/peakpark-edge-simulator:latest
+    container_name: parking-edge-simulator
+    environment:
+      MQTT_BROKER: mqtt-broker
+      UPDATE_INTERVAL: 15
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+  ingest-bridge:
+    image: connorsharpmckinnis/peakpark-ingest-bridge:latest
+    container_name: parking-ingest-bridge
+    environment:
+      MQTT_BROKER: mqtt-broker
+      INGEST_SERVICE_URL: http://ingest-service:8001
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+      ingest-service:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - parking-net
+
+networks:
+  parking-net:
+    driver: bridge
+
+volumes:
+  parking_data:
+  mqtt_data:
+  mqtt_log:

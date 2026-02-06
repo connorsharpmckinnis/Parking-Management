@@ -40,6 +40,11 @@ class CameraBase(BaseModel):
     sahi_enabled: bool = False
     sahi_tile_size: int = 640
     sahi_overlap_ratio: float = 0.25
+    
+    # Sub-BBox Occupancy Logic
+    occupancy_bottom_pct: float = 0.33
+    occupancy_min_overlap: float = 0.30
+    
     desired_state: DesiredState = DesiredState.STOPPED
 
 class CameraCreate(CameraBase):
@@ -57,6 +62,8 @@ class CameraUpdate(BaseModel):
     sahi_enabled: Optional[bool] = None
     sahi_tile_size: Optional[int] = None
     sahi_overlap_ratio: Optional[float] = None
+    occupancy_bottom_pct: Optional[float] = None
+    occupancy_min_overlap: Optional[float] = None
 
 class CameraResponse(CameraBase):
     model_config = ConfigDict(from_attributes=True)
