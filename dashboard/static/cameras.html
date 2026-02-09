@@ -71,6 +71,89 @@
         </div>
     </div>
 
+    <!-- Config Modal -->
+    <div id="modal-config"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: rgba(0,0,0,0.8); align-items: center; justify-content: center;">
+        <div class="card"
+            style="width: 90%; max-width: 600px; max-height: 95vh; display: flex; flex-direction: column;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-title">Camera Configuration</span>
+                <button onclick="closeConfigModal()"
+                    style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--foreground);">&times;</button>
+            </div>
+            <div class="card-content" style="overflow-y: auto;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+
+                    <div style="grid-column: 1/-1;">
+                        <h3
+                            style="font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem;">
+                            Vision Settings</h3>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Model File (.pt)</label>
+                        <input type="text" id="input-model" class="form-input" placeholder="e.g. rtdetr-l.pt">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Processing Interval (sec)</label>
+                        <input type="number" id="input-interval" class="form-input" min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Confidence (0.0 - 1.0)</label>
+                        <input type="number" id="input-conf" class="form-input" step="0.05" min="0" max="1">
+                    </div>
+
+                    <div class="form-group"
+                        style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem;">
+                        <input type="checkbox" id="input-sahi" style="width: 16px; height: 16px;">
+                        <label class="form-label" for="input-sahi" style="margin-bottom: 0;">Enable SAHI
+                            (Slicing)</label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Occupancy Bottom %</label>
+                        <input type="number" id="input-bottom-pct" class="form-input" step="0.01" min="0" max="1">
+                        <small style="color: var(--muted-foreground);">Portion of bbox height to check</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Min Overlap %</label>
+                        <input type="number" id="input-min-overlap" class="form-input" step="0.01" min="0" max="1">
+                    </div>
+
+                    <div style="grid-column: 1/-1; margin-top: 1rem;">
+                        <h3
+                            style="font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem;">
+                            Location & Mapping</h3>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Latitude</label>
+                        <input type="number" id="input-lat" class="form-input" step="any" placeholder="35.xxxx">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Longitude</label>
+                        <input type="number" id="input-lon" class="form-input" step="any" placeholder="-78.xxxx">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Heading (0-360)</label>
+                        <input type="number" id="input-heading" class="form-input" step="1" min="0" max="360">
+                    </div>
+
+                </div>
+
+                <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                    <button class="btn btn-outline" onclick="closeConfigModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <div id="toast-container" class="toast-container"></div>
     <script src="/static/js/shared.js"></script>
@@ -115,9 +198,12 @@
                              <button class="btn btn-outline btn-sm" onclick="deleteCam('${c.id}', '${escapeHtml(c.name)}')"><i data-lucide="trash-2" style="width: 14px; color: var(--destructive);"></i></button>
                          </div>
                          
-                         <div style="margin-bottom: 0.5rem;">
-                            <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="openEditModal('${c.id}')">
-                                <i data-lucide="edit-3" style="width: 14px; margin-right: 0.5rem;"></i> Edit Zones
+                         <div style="margin-bottom: 0.5rem; display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openEditModal('${c.id}')">
+                                <i data-lucide="scan-line" style="width: 14px; margin-right: 0.5rem;"></i> Zones
+                            </button>
+                            <button class="btn btn-outline btn-sm" style="flex: 1;" onclick="openConfigModal('${c.id}')">
+                                <i data-lucide="settings" style="width: 14px; margin-right: 0.5rem;"></i> Config
                             </button>
                          </div>
                          
@@ -325,6 +411,57 @@
         // Refresh metadata every 10 seconds
         const refresh = new AutoRefresh(load, 10000);
         refresh.start();
+
+        // --- Config Modal Logic ---
+        function openConfigModal(camId) {
+            activeCamId = camId;
+            const cam = cams.find(c => c.id === camId);
+            if (!cam) return;
+
+            // Populate form
+            document.getElementById('input-model').value = cam.model_version || 'rtdetr-l.pt';
+            document.getElementById('input-interval').value = cam.processing_interval_sec || 60;
+            document.getElementById('input-conf').value = cam.detection_confidence || 0.25;
+            document.getElementById('input-sahi').checked = cam.sahi_enabled || false;
+            document.getElementById('input-bottom-pct').value = cam.occupancy_bottom_pct || 0.33;
+            document.getElementById('input-min-overlap').value = cam.occupancy_min_overlap || 0.30;
+
+            document.getElementById('input-lat').value = cam.latitude || '';
+            document.getElementById('input-lon').value = cam.longitude || '';
+            document.getElementById('input-heading').value = cam.heading || '';
+
+            document.getElementById('modal-config').style.display = 'flex';
+        }
+
+        function closeConfigModal() {
+            document.getElementById('modal-config').style.display = 'none';
+        }
+
+        async function saveConfig() {
+            if (!activeCamId) return;
+
+            const payload = {
+                model_version: document.getElementById('input-model').value,
+                processing_interval_sec: parseInt(document.getElementById('input-interval').value),
+                detection_confidence: parseFloat(document.getElementById('input-conf').value),
+                sahi_enabled: document.getElementById('input-sahi').checked,
+                occupancy_bottom_pct: parseFloat(document.getElementById('input-bottom-pct').value),
+                occupancy_min_overlap: parseFloat(document.getElementById('input-min-overlap').value),
+
+                latitude: document.getElementById('input-lat').value ? parseFloat(document.getElementById('input-lat').value) : null,
+                longitude: document.getElementById('input-lon').value ? parseFloat(document.getElementById('input-lon').value) : null,
+                heading: document.getElementById('input-heading').value ? parseFloat(document.getElementById('input-heading').value) : null
+            };
+
+            try {
+                await updateCamera(activeCamId, payload);
+                showToast("Configuration saved!", "success");
+                closeConfigModal();
+                load();
+            } catch (e) {
+                showToast("Error saving: " + e.message, "error");
+            }
+        }
     </script>
 </body>
 

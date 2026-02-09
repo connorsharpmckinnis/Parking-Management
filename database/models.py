@@ -43,6 +43,11 @@ class Camera(Base):
     connection_type = Column(Enum(ConnectionType), default=ConnectionType.FIBER)
     stream_url = Column(String, nullable=False) # Store encrypted in production
     
+    # Location details
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    heading = Column(Float, nullable=True) # 0-360 degrees
+    
     # Vision Config
     model_version = Column(String, default="rtdetr-l.pt")
     processing_interval_sec = Column(Integer, default=60)
@@ -80,6 +85,7 @@ class Spot(Base):
     id = Column(String, primary_key=True) # e.g. "North-001"
     location_id = Column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False)
     name = Column(String, nullable=True)
+    is_deleted = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     location = relationship("Location", back_populates="spots")

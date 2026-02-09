@@ -92,7 +92,7 @@ services:
     environment:
       CONTROL_PLANE_URL: http://control-plane:8000
       INGEST_SERVICE_URL: http://ingest-service:8001
-      WORKER_IMAGE: parking-vision-worker:latest
+      WORKER_IMAGE: peakpark-vision-worker:latest
       # --- DEV CONFIG ---
       FORCE_CPU: "true"
       DOCKER_NETWORK: parking-management_parking-net
@@ -116,10 +116,9 @@ services:
     build:
       context: .
       dockerfile: vision_worker/Dockerfile
-    image: parking-vision-worker:latest
+    image: peakpark-vision-worker:latest
     container_name: parking-vision-worker-builder
     command: [ "echo", "Vision worker image built!" ]
-    profiles: [ "build-only" ]
     networks:
       - parking-net
   # mqtt-broker:

@@ -54,11 +54,56 @@ class VisionWorker:
         self.latest_frame = None
         self.lock = threading.Lock()
         
+        # Initialize attributes that will be updated by _fetch_remote_config
+        self.model_version = self.model_path 
+        self.model = None
+
         # Initial config fetch
         self._fetch_remote_config()
 
         self.device = self._get_device()
         print(f"Using device: {self.device}")
+
+    def _load_model(self):
+        """Load or Reload the model based on current config."""
+        print(f"Loading model: {self.model_path} (SAHI={self.use_sahi})...")
+        
+        # Cleanup existing model to free VRAM
+        if self.model is not None:
+            del self.model
+            self.model = None
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except:
+                pass
+            import gc
+            gc.collect()
+
+        try:
+            if self.use_sahi:
+                print(f"Initializing SAHI model (tile={self.sahi_tile_size}, overlap={self.sahi_overlap_ratio})...")
+                self.model = AutoDetectionModel.from_pretrained(
+                    model_type='ultralytics',
+                    model_path=self.model_path,
+                    confidence_threshold=self.conf_threshold,
+                    device=self.device
+                )
+            else:
+                if "rtdetr" in self.model_path:
+                    self.model = RTDETR(self.model_path)
+                else:
+                    self.model = YOLO(self.model_path)
+                
+                # Check if .to() is available (YOLO/RTDETR usually handle device in predict or init, but safe to call)
+                if hasattr(self.model, 'to'):
+                    self.model.to(self.device)
+                    
+            print(f"Model loaded successfully: {self.model_path}")
+        except Exception as e:
+            print(f"Failed to load model {self.model_path}: {e}")
+            self.model = None
 
     def _get_device(self):
         try:
@@ -87,7 +132,7 @@ class VisionWorker:
             return []
 
     def _fetch_remote_config(self):
-        """Fetch latest geometry from Control Plane."""
+        """Fetch latest config from Control Plane and apply changes."""
         if not self.config_endpoint or not self.camera_id:
             return
 
@@ -96,13 +141,75 @@ class VisionWorker:
             resp = requests.get(url, timeout=3)
             if resp.status_code == 200:
                 data = resp.json()
-                # Update geometry if present
+                
+                # 1. Update Geometry
                 if "geometry" in data:
                     new_polys = self._parse_zones(data["geometry"])
                     if new_polys:
                         self.polygons = new_polys
                         self.total_slots = len(self.polygons)
-                        print(f"Config updated: {self.total_slots} zones loaded.")
+                
+                # 2. Update Processing Config
+                if "processing_interval_sec" in data and data["processing_interval_sec"] is not None:
+                    new_val = float(data["processing_interval_sec"])
+                    if new_val != self.interval:
+                        print(f"DEBUG: Config change: Interval {self.interval} -> {new_val}")
+                        self.interval = new_val
+                    
+                if "detection_confidence" in data and data["detection_confidence"] is not None:
+                    new_val = float(data["detection_confidence"])
+                    if new_val != self.conf_threshold:
+                        print(f"DEBUG: Config change: Confidence {self.conf_threshold} -> {new_val}")
+                        self.conf_threshold = new_val
+                    
+                if "occupancy_bottom_pct" in data and data["occupancy_bottom_pct"] is not None:
+                    new_val = float(data["occupancy_bottom_pct"])
+                    if new_val != self.occupancy_bottom_pct:
+                        print(f"DEBUG: Config change: Bottom Pct {self.occupancy_bottom_pct} -> {new_val}")
+                        self.occupancy_bottom_pct = new_val
+                    
+                if "occupancy_min_overlap" in data and data["occupancy_min_overlap"] is not None:
+                    new_val = float(data["occupancy_min_overlap"])
+                    if new_val != self.occupancy_min_overlap:
+                        print(f"DEBUG: Config change: Min Overlap {self.occupancy_min_overlap} -> {new_val}")
+                        self.occupancy_min_overlap = new_val
+
+                # 3. Check for Model/SAHI changes triggers reload
+                needs_reload = False
+                
+                # Model Version Update
+                new_model = data.get("model_version")
+                if new_model and new_model != self.model_version:
+                    print(f"Config change: Model version {self.model_version} -> {new_model}")
+                    self.model_path = new_model
+                    self.model_version = new_model
+                    needs_reload = True
+                    
+                # SAHI Config Update
+                new_sahi = data.get("sahi_enabled", False)
+                if new_sahi != self.use_sahi:
+                    print(f"Config change: SAHI enabled {self.use_sahi} -> {new_sahi}")
+                    self.use_sahi = new_sahi
+                    if self.use_sahi and not SAHI_AVAILABLE:
+                         print("SAHI requested but not available. Ignoring.")
+                         self.use_sahi = False
+                    else:
+                        needs_reload = True
+                
+                if self.use_sahi:
+                    new_tile = int(data.get("sahi_tile_size", self.sahi_tile_size))
+                    if new_tile != self.sahi_tile_size:
+                        print(f"DEBUG: Config change: SAHI Tile {self.sahi_tile_size} -> {new_tile}")
+                        self.sahi_tile_size = new_tile
+
+                    new_overlap = float(data.get("sahi_overlap_ratio", self.sahi_overlap_ratio))
+                    if new_overlap != self.sahi_overlap_ratio:
+                        print(f"DEBUG: Config change: SAHI Overlap {self.sahi_overlap_ratio} -> {new_overlap}")
+                        self.sahi_overlap_ratio = new_overlap
+                
+                if needs_reload:
+                    self._load_model()
+                    
         except Exception as e:
             print(f"Config fetch failed: {e}")
 
@@ -130,27 +237,9 @@ class VisionWorker:
 
     def _process_loop(self):
         print(f"Worker for {self.camera_id} starting...")
-        print(f"Worker initiatlized using model {self.model_path}")
-        model = None
-        if self.use_sahi:
-            print(f"Initializing SAHI model (tile={self.sahi_tile_size}, overlap={self.sahi_overlap_ratio})...")
-            try:
-                model = AutoDetectionModel.from_pretrained(
-                    model_type='ultralytics',
-                    model_path=self.model_path,
-                    confidence_threshold=self.conf_threshold,
-                    device=self.device
-                )
-            except Exception as e:
-                print(f"Failed to load SAHI model: {e}")
-                self.use_sahi = False
         
-        if not self.use_sahi:
-            if self.model_path.startswith("rtdetr"):
-                model = RTDETR(self.model_path)
-            else:
-                model = YOLO(self.model_path)
-            model.to(self.device)
+        # Initial model load
+        self._load_model()
         
         last_report = 0
         last_config_check = 0
@@ -168,8 +257,8 @@ class VisionWorker:
                 with self.lock:
                     frame = self.latest_frame.copy() if self.latest_frame is not None else None
                 
-                if frame is not None:
-                    self._analyze_and_report(model, frame)
+                if frame is not None and self.model is not None:
+                    self._analyze_and_report(self.model, frame)
                     last_report = time.time()
                 else:
                     self._send_heartbeat("degraded", "No frames captured")

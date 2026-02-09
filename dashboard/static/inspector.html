@@ -55,13 +55,16 @@
                                         <th>Name</th>
                                         <th>Location</th>
                                         <th>Status</th>
+                                        <th>Lat</th>
+                                        <th>Lon</th>
+                                        <th>Bearing</th>
                                         <th>URL</th>
                                         <th>Last Update</th>
                                     </tr>
                                 </thead>
                                 <tbody id="cameras-tbody">
                                     <tr>
-                                        <td colspan="6" style="padding: 1rem; color: var(--muted-foreground);">
+                                        <td colspan="9" style="padding: 1rem; color: var(--muted-foreground);">
                                             Loading...</td>
                                     </tr>
                                 </tbody>
@@ -231,6 +234,9 @@
                     <td>${escapeHtml(cam.name)}</td>
                     <td>${escapeHtml(locationsMap[cam.location_id] || 'N/A')}</td>
                     <td><span class="${cam.status === 'healthy' ? 'text-success' : 'text-muted'}">${cam.status}</span></td>
+                    <td>${cam.latitude !== null ? cam.latitude.toFixed(4) : '-'}</td>
+                    <td>${cam.longitude !== null ? cam.longitude.toFixed(4) : '-'}</td>
+                    <td>${cam.heading !== null ? cam.heading.toFixed(1) + '°' : '-'}</td>
                     <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground);">${escapeHtml(cam.stream_url)}</td>
                     <td>${formatTimestamp(cam.last_event_time)}</td>
                 </tr>

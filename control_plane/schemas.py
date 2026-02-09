@@ -30,6 +30,9 @@ class CameraBase(BaseModel):
     location_id: UUID
     connection_type: ConnectionType = ConnectionType.FIBER
     stream_url: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    heading: Optional[float] = None
     model_version: str = "rtdetr-l.pt"
     processing_interval_sec: int = 60
     geometry: Optional[Any] = None
@@ -57,6 +60,11 @@ class CameraUpdate(BaseModel):
     desired_state: Optional[DesiredState] = None
     geometry: Optional[Any] = None
     processing_interval_sec: Optional[int] = None
+    model_version: Optional[str] = None
+    
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    heading: Optional[float] = None
     
     detection_confidence: Optional[float] = None
     sahi_enabled: Optional[bool] = None
@@ -72,6 +80,7 @@ class CameraResponse(CameraBase):
     status: DeviceStatus
     last_heartbeat: Optional[datetime] = None
     last_event_time: Optional[datetime] = None
+    is_deleted: bool
     created_at: datetime
 
 class OccupancyUpdate(BaseModel):

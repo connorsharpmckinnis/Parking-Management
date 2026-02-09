@@ -16,7 +16,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.db import get_db, engine
-from database.models import Base, Camera, OccupancyEvent, HealthLog, Location, Spot, SpotObservation, DeviceStatus
+from database.models import Base, Camera, OccupancyEvent, HealthLog, Location, Spot, SpotObservation, DeviceStatus, DesiredState, ConnectionType
 from control_plane.schemas import (
     CameraCreate, CameraResponse, CameraUpdate, OccupancyUpdate, 
     HealthUpdate, OccupancyEventResponse, CaptureFrameRequest, CaptureFrameResponse,
@@ -111,27 +111,90 @@ def delete_location(location_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @app.get("/locations/{location_id}/status")
 def get_location_status(location_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Return the latest occupancy status for all spots in a location."""
-    spots = db.query(Spot).filter(Spot.location_id == location_id).all()
+    """
+    Return the latest occupancy status for a location.
+    Includes summary counts and list of spots.
+    Spots with stale data (older than 3x camera interval or 5 min) are counted as 'unknown'.
+    """
+    # Get all ACTIVE spots for this location
+    spots = db.query(Spot).filter(Spot.location_id == location_id, Spot.is_deleted == False).all()
+    
+    total_spots = len(spots)
+    occupied_count = 0
+    free_count = 0
+    unknown_count = 0
     
     results = []
+    
+    now = datetime.now(timezone.utc)
+    
+    # Batch fetch latest observations with Camera data
+    # This loop can be optimized with a complex query, but keeping it readable for now as requested.
     for spot in spots:
-        # Get latest observation for this spot
-        latest_obs = db.query(SpotObservation).filter(SpotObservation.spot_id == spot.id).order_by(SpotObservation.timestamp.desc()).first()
+        obs = db.query(SpotObservation)\
+            .join(Camera, SpotObservation.camera_id == Camera.id)\
+            .filter(SpotObservation.spot_id == spot.id)\
+            .add_columns(Camera.processing_interval_sec)\
+            .order_by(SpotObservation.timestamp.desc())\
+            .first()
+            
+        is_unknown = True
+        is_occupied = False
+        
+        if obs:
+            observation = obs[0] # SpotObservation object
+            interval = obs[1] or 60 # Camera intveral
+            
+            # Recency check
+            # Threshold: 3x interval or max 5 minutes (300s)
+            threshold_seconds = min(interval * 3, 300) 
+            if observation.timestamp:
+                delta = (now - observation.timestamp).total_seconds()
+                if delta <= threshold_seconds:
+                    is_unknown = False
+                    is_occupied = observation.occupied
+        
+        status_str = "unknown"
+        if not is_unknown:
+            if is_occupied:
+                occupied_count += 1
+                status_str = "occupied"
+            else:
+                free_count += 1
+                status_str = "free"
+        else:
+            unknown_count += 1
+            
         results.append({
             "spot_id": spot.id,
             "name": spot.name,
-            "occupied": latest_obs.occupied if latest_obs else False,
-            "last_update": latest_obs.timestamp if latest_obs else None
+            "status": status_str,
+            "occupied": is_occupied if not is_unknown else None, # None if unknown
+            "last_update": obs[0].timestamp if obs else None
         })
     
-    return results
+    return {
+        "location_id": location_id,
+        "total_spots": total_spots,
+        "occupied_count": occupied_count,
+        "free_count": free_count,
+        "unknown_count": unknown_count,
+        "spots": results
+    }
+
+@app.get("/locations/{location_id}/cameras", response_model=List[CameraResponse])
+def get_location_cameras(location_id: uuid.UUID, db: Session = Depends(get_db)):
+    """list all cameras assigned to a specific location."""
+    cameras = db.query(Camera).filter(Camera.location_id == location_id).all()
+    for cam in cameras:
+        cam.status = _compute_status(cam)
+    return cameras
 
 # --- Cameras ---
 
 @app.get("/cameras", response_model=List[CameraResponse])
 def list_cameras(db: Session = Depends(get_db)):
-    cameras = db.query(Camera).all()
+    cameras = db.query(Camera).filter(Camera.is_deleted == False).all()
     for cam in cameras:
         cam.status = _compute_status(cam)
     return cameras
@@ -195,6 +258,8 @@ def _sync_spots(db: Session, db_camera: Camera):
             )
             db.add(db_spot)
         else:
+            # Re-activate if it was soft-deleted
+            db_spot.is_deleted = False
             # Ensure it's linked to the correct location (re-parenting if moved)
             db_spot.location_id = db_camera.location_id
     db.commit()
@@ -224,10 +289,17 @@ def _compute_status(camera: Camera) -> DeviceStatus:
         
     delta = (datetime.now(timezone.utc) - camera.last_heartbeat).total_seconds()
     
-    # Relaxed thresholds to accommodate default 60s polling intervals
-    if delta > 600: # 10 minutes without heartbeat
+    # Dynamic thresholds based on configured processing interval
+    interval = camera.processing_interval_sec or 60
+    
+    # Allow 3 missed heartbeats before degrading
+    degraded_limit = interval * 3
+    # Allow a bit more before disconnecting, or cap at 10 mins
+    disconnected_limit = max(interval * 6, 600)
+
+    if delta > disconnected_limit: 
         return DeviceStatus.DISCONNECTED
-    elif delta > 300: # 5 minutes without heartbeat
+    elif delta > degraded_limit:
         return DeviceStatus.DEGRADED
         
     return camera.status # Return reported status (usually HEALTHY)
@@ -267,25 +339,28 @@ def update_camera(camera_id: uuid.UUID, camera_update: CameraUpdate, db: Session
 
 @app.delete("/cameras/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Permanently delete a camera and its related data."""
-    db_camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    """Soft delete a camera and its related spots if orphaned."""
+    db_camera = db.query(Camera).filter(Camera.id == camera_id, Camera.is_deleted == False).first()
     if not db_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     
     location_id = db_camera.location_id
 
-    # 1. Delete transient data
-    db.query(OccupancyEvent).filter(OccupancyEvent.camera_id == camera_id).delete()
-    db.query(HealthLog).filter(HealthLog.camera_id == camera_id).delete()
-    db.query(SpotObservation).filter(SpotObservation.camera_id == camera_id).delete()
+    # Mark camera as deleted
+    db_camera.is_deleted = True
+    db_camera.desired_state = DesiredState.STOPPED
     
-    # 2. Identify spots that were uniquely referenced by THIS camera in this location
+    # Identify spots that were uniquely referenced by THIS camera in this location
     if location_id and db_camera.geometry:
-        # Get all spots currently in this location
+        # Get all ACTIVE spots currently in this location
         all_spots = db.query(Spot).filter(Spot.location_id == location_id).all()
         
-        # Get all OTHER cameras in this location
-        other_cameras = db.query(Camera).filter(Camera.location_id == location_id, Camera.id != camera_id).all()
+        # Get all OTHER active cameras in this location
+        other_cameras = db.query(Camera).filter(
+            Camera.location_id == location_id, 
+            Camera.id != camera_id,
+            Camera.is_deleted == False
+        ).all()
         
         # Build set of spot IDs covered by OTHER cameras
         covered_by_others = set()
@@ -294,14 +369,11 @@ def delete_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
                 for zone in oc.geometry:
                     covered_by_others.add(f"{location_id}:{zone.get('id')}")
         
-        # If a spot isn't covered by others, we can safely prune it (or leave it if you want history)
-        # For PeakPark, let's prune orphaned spots to keep the UI clean as requested.
+        # For PeakPark, we soft-delete orphaned spots but keep observations tied to them
         for spot in all_spots:
             if spot.id not in covered_by_others:
-                db.query(SpotObservation).filter(SpotObservation.spot_id == spot.id).delete()
-                db.delete(spot)
+                spot.is_deleted = True
 
-    db.delete(db_camera)
     db.commit()
     return None
 
@@ -431,8 +503,8 @@ def get_stats(db: Session = Depends(get_db)):
     
     occupied_count = sum(1 for obs in latest_obs if obs.occupied)
     
-    # Total spots (all configured spots)
-    total_spots = db.query(Spot).count()
+    # Total spots (all active configured spots)
+    total_spots = db.query(Spot).filter(Spot.is_deleted == False).count()
     
     # Recent events count (last 24h)
     one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
@@ -458,7 +530,7 @@ def list_spots(location_id: Optional[uuid.UUID] = None, db: Session = Depends(ge
     query = db.query(
         Spot,
         Location.name.label('location_name')
-    ).join(Location, Spot.location_id == Location.id)
+    ).join(Location, Spot.location_id == Location.id).filter(Spot.is_deleted == False)
     
     if location_id:
         query = query.filter(Spot.location_id == location_id)

@@ -44,10 +44,33 @@
                                 <input type="text" class="form-input mb-sm" id="camera-name" value="New Camera">
                             </div>
                             <div>
+                                <label class="form-label">Vision Model (.pt)</label>
+                                <input type="text" class="form-input mb-sm" id="camera-model" value="rtdetr-l.pt"
+                                    placeholder="e.g. yolo11n.pt">
+                            </div>
+                            <div>
                                 <label class="form-label">Location</label>
                                 <select class="form-select mb-sm" id="camera-location-id" required>
                                     <option value="">-- Select Location --</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-grid" style="margin-bottom: 1rem;">
+                            <div>
+                                <label class="form-label">Latitude</label>
+                                <input type="number" class="form-input" id="camera-lat" placeholder="35.xxxx"
+                                    step="any">
+                            </div>
+                            <div>
+                                <label class="form-label">Longitude</label>
+                                <input type="number" class="form-input" id="camera-lon" placeholder="-78.xxxx"
+                                    step="any">
+                            </div>
+                            <div>
+                                <label class="form-label">Heading</label>
+                                <input type="number" class="form-input" id="camera-heading" placeholder="0-360" min="0"
+                                    max="360">
                             </div>
                         </div>
 
@@ -345,6 +368,7 @@
             const payload = {
                 name: document.getElementById('camera-name').value,
                 location_id: document.getElementById('camera-location-id').value,
+                model_version: document.getElementById('camera-model').value || 'rtdetr-l.pt',
                 stream_url: getStreamUrl(),
                 connection_type: document.getElementById('connection-type').value,
                 desired_state: 'running',
@@ -356,7 +380,11 @@
                 sahi_tile_size: parseInt(document.getElementById('sahi-tile-size').value) || 640,
                 sahi_overlap_ratio: parseFloat(document.getElementById('sahi-overlap').value) || 0.25,
                 occupancy_bottom_pct: (parseInt(document.getElementById('occupancy-bottom-pct').value) || 33) / 100.0,
-                occupancy_min_overlap: (parseInt(document.getElementById('occupancy-min-overlap').value) || 30) / 100.0
+                occupancy_min_overlap: (parseInt(document.getElementById('occupancy-min-overlap').value) || 30) / 100.0,
+
+                latitude: document.getElementById('camera-lat').value ? parseFloat(document.getElementById('camera-lat').value) : null,
+                longitude: document.getElementById('camera-lon').value ? parseFloat(document.getElementById('camera-lon').value) : null,
+                heading: document.getElementById('camera-heading').value ? parseFloat(document.getElementById('camera-heading').value) : null
             };
 
             try { await createCamera(payload); showToast('Registered!', 'success'); setTimeout(() => window.location.href = 'index.html', 1500); }

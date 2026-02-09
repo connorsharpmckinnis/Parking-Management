@@ -8,7 +8,7 @@ import json
 CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://control-plane:8000")
 INGEST_SERVICE_URL = os.getenv("INGEST_SERVICE_URL", "http://ingest-service:8001")
 RECONCILE_INTERVAL = int(os.getenv("RECONCILE_INTERVAL", "10"))
-WORKER_IMAGE = os.getenv("WORKER_IMAGE", "parking-vision-worker:latest")
+WORKER_IMAGE = os.getenv("WORKER_IMAGE", "peakpark-vision-worker:latest")
 FORCE_CPU = os.getenv("FORCE_CPU", "false").lower() == "true"
 MOUNT_WORKER_CODE = os.getenv("MOUNT_WORKER_CODE") # Optional: host path to vision_worker for dev
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "parking-management_parking-net")
